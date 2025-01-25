@@ -1,0 +1,15 @@
+[git]
+  repoURL = "https://gitverse.ru/Xpamych/xpamych-alr-repo"
+  repoDir = "/etc/alr-updater/repo"
+  [git.commit]
+    # Имя и адрес электронной почты, которые будут использоваться при фиксации git
+    name = "CHANGE ME"
+    email = "CHANGE ME"
+  [git.credentials]
+    # Имя пользователя и пароль для git push. Используйте личный токен доступа в качестве пароля для Github.
+    username = "CHANGE ME"
+    password = "CHANGE ME"
+
+[webhook]
+  # Хэш пароля для webhook. Сгенерируйте его, используя `alr-updater -g`.
+  pwd_hash = "CHANGE ME"

@@ -1,0 +1,43 @@
+before:
+  hooks:
+    - go mod tidy
+builds:
+  - id: lure-updater
+    env:
+      - CGO_ENABLED=0
+    binary: lure-updater
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - 386
+      - arm64
+      - arm
+      - riscv64
+archives:
+  - id: archive
+    name_template: "{{ .ProjectName }}-{{ .Arch }}"
+    files:
+    - lure-updater.example.toml
+blobs:
+  - provider: s3
+    endpoint: https://api.minio.elara.ws
+    region: default
+    bucket: lure-updater
+    ids:
+      - archive
+    folder: "/"
+release:
+  gitea:
+    owner: lure
+    name: lure-updater
+gitea_urls:
+  api: 'https://gitea.elara.ws/api/v1/'
+  download: 'https://gitea.elara.ws'
+  skip_tls_verify: false
+checksum:
+  name_template: 'checksums.txt'
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+changelog:
+  sort: asc
