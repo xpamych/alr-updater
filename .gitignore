@@ -2,3 +2,6 @@
 /lure-updater
 /dist/
 *.star
+.gigaide
+.idea
+.claude
