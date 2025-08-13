@@ -1,6 +1,6 @@
 /*
- * LURE Updater - Automated updater bot for LURE packages
- * Copyright (C) 2023 Elara Musayelyan
+ * ALR Updater - Automated updater bot for ALR packages
+ * Copyright (C) 2025 The ALR Authors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,8 +31,8 @@ import (
 	"github.com/spf13/pflag"
 	"go.elara.ws/logger"
 	"go.elara.ws/logger/log"
-	"lure.sh/lure-updater/internal/builtins"
-	"lure.sh/lure-updater/internal/config"
+	"gitea.plemya-x.ru/Plemya-x/ALR-updater/internal/builtins"
+	"gitea.plemya-x.ru/Plemya-x/ALR-updater/internal/config"
 	"go.etcd.io/bbolt"
 	"go.starlark.net/starlark"
 	"golang.org/x/crypto/bcrypt"
@@ -44,9 +44,9 @@ func init() {
 }
 
 func main() {
-	configPath := pflag.StringP("config", "c", "/etc/lure-updater/config.toml", "Path to config file")
-	dbPath := pflag.StringP("database", "d", "/etc/lure-updater/db", "Path to database file")
-	pluginDir := pflag.StringP("plugin-dir", "p", "/etc/lure-updater/plugins", "Path to plugin directory")
+	configPath := pflag.StringP("config", "c", "/etc/alr-updater/config.toml", "Path to config file")
+	dbPath := pflag.StringP("database", "d", "/etc/alr-updater/db", "Path to database file")
+	pluginDir := pflag.StringP("plugin-dir", "p", "/etc/alr-updater/plugins", "Path to plugin directory")
 	serverAddr := pflag.StringP("address", "a", ":8080", "Webhook server address")
 	genHash := pflag.BoolP("gen-hash", "g", false, "Generate a password hash for webhooks")
 	useEnv := pflag.BoolP("use-env", "E", false, "Use environment variables for configuration")

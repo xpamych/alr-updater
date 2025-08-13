@@ -1,37 +1,37 @@
-job "lure-updater" {
+job "alr-updater" {
   region      = "global"
   datacenters = ["dc1"]
   type        = "service"
 
-  group "lure-updater" {
+  group "alr-updater" {
     network {
       port "webhook" {
         to = 8080
       }
     }
 
-    volume "lure-updater-data" {
+    volume "alr-updater-data" {
       type      = "host"
-      source    = "lure-updater-data"
+      source    = "alr-updater-data"
       read_only = false
     }
 
-    task "lure-updater" {
+    task "alr-updater" {
       driver = "docker"
 
       volume_mount {
-        volume      = "lure-updater-data"
-        destination = "/etc/lure-updater"
+        volume      = "alr-updater-data"
+        destination = "/etc/alr-updater"
         read_only   = false
       }
 
       env {
-        GIT_REPO_DIR             = "/etc/lure-updater/repo"
-        GIT_REPO_URL             = "https://github.com/lure-sh/lure-repo.git"
-        GIT_CREDENTIALS_USERNAME = "lure-repo-bot"
-        GIT_CREDENTIALS_PASSWORD = "${GITHUB_PASSWORD}"
-        GIT_COMMIT_NAME          = "lure-repo-bot"
-        GIT_COMMIT_EMAIL         = "lure@elara.ws"
+        GIT_REPO_DIR             = "/etc/alr-updater/repo"
+        GIT_REPO_URL             = "https://gitea.plemya-x.ru/Plemya-x/alr-repo.git"
+        GIT_CREDENTIALS_USERNAME = "alr-repo-bot"
+        GIT_CREDENTIALS_PASSWORD = "${GITEA_PASSWORD}"
+        GIT_COMMIT_NAME          = "alr-repo-bot"
+        GIT_COMMIT_EMAIL         = "bot@plemya-x.ru"
         WEBHOOK_PASSWORD_HASH    = "${PASSWORD_HASH}"
 
         // Hack to force Nomad to re-deploy the service
@@ -41,25 +41,25 @@ job "lure-updater" {
 
       config {
         image   = "alpine:latest"
-        command = "/opt/lure-updater/lure-updater"
+        command = "/opt/alr-updater/alr-updater"
         args    = ["-DE"]
         ports   = ["webhook"]
-        volumes = ["local/lure-updater/:/opt/lure-updater:ro"]
+        volumes = ["local/alr-updater/:/opt/alr-updater:ro"]
       }
 
       artifact {
-        source      = "https://api.minio.elara.ws/lure-updater/lure-updater-$${attr.cpu.arch}.tar.gz"
-        destination = "local/lure-updater"
+        source      = "https://gitea.plemya-x.ru/api/v1/repos/Plemya-x/ALR-updater/releases/latest/alr-updater-$${attr.cpu.arch}.tar.gz"
+        destination = "local/alr-updater"
       }
 
       service {
-        name = "lure-updater"
+        name = "alr-updater"
         port = "webhook"
 
         tags = [
           "traefik.enable=true",
-          "traefik.http.routers.lure-updater.rule=Host(`updater.lure.sh`)",
-          "traefik.http.routers.lure-updater.tls.certResolver=letsencrypt",
+          "traefik.http.routers.alr-updater.rule=Host(`updater.plemya-x.ru`)",
+          "traefik.http.routers.alr-updater.tls.certResolver=letsencrypt",
         ]
       }
     }

@@ -1,6 +1,6 @@
 /*
- * LURE Updater - Automated updater bot for LURE packages
- * Copyright (C) 2023 Elara Musayelyan
+ * ALR Updater - Automated updater bot for ALR packages
+ * Copyright (C) 2025 The ALR Authors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,7 +30,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"go.elara.ws/logger/log"
-	"lure.sh/lure-updater/internal/config"
+	"gitea.plemya-x.ru/Plemya-x/ALR-updater/internal/config"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 )

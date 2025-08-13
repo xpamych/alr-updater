@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/vmihailenco/msgpack/v5"
-	"lure.sh/lure-updater/internal/convert"
+	"gitea.plemya-x.ru/Plemya-x/ALR-updater/internal/convert"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 )

@@ -1,6 +1,6 @@
 /*
- * LURE Updater - Automated updater bot for LURE packages
- * Copyright (C) 2023 Elara Musayelyan
+ * ALR Updater - Automated updater bot for ALR packages
+ * Copyright (C) 2025 The ALR Authors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -36,6 +36,8 @@ var regexModule = &starlarkstruct.Module{
 	Members: starlark.StringDict{
 		"compile":      starlark.NewBuiltin("regex.compile", regexCompile),
 		"compile_glob": starlark.NewBuiltin("regex.compile_glob", regexCompileGlob),
+		"find":         starlark.NewBuiltin("regex.find", regexFind),
+		"replace":      starlark.NewBuiltin("regex.replace", regexReplace),
 	},
 }
 
@@ -142,4 +144,56 @@ func matchesToStarlark1D(match []string) *starlark.List {
 		list[j] = starlark.String(val)
 	}
 	return starlark.NewList(list)
+}
+
+func regexFind(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var pattern, text string
+	err := starlark.UnpackArgs("regex.find", args, kwargs, "pattern", &pattern, "text", &text)
+	if err != nil {
+		return nil, err
+	}
+
+	cacheMtx.Lock()
+	regex, ok := regexCache[pattern]
+	if !ok {
+		regex, err = pcre.Compile(pattern)
+		if err != nil {
+			cacheMtx.Unlock()
+			return nil, err
+		}
+		regexCache[pattern] = regex
+	}
+	cacheMtx.Unlock()
+
+	matches := regex.FindStringSubmatch(text)
+	if len(matches) > 1 {
+		return starlark.String(matches[1]), nil
+	}
+	if len(matches) > 0 {
+		return starlark.String(matches[0]), nil
+	}
+	return starlark.String(""), nil
+}
+
+func regexReplace(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var text, pattern, replacement string
+	err := starlark.UnpackArgs("regex.replace", args, kwargs, "text", &text, "pattern", &pattern, "replacement", &replacement)
+	if err != nil {
+		return nil, err
+	}
+
+	cacheMtx.Lock()
+	regex, ok := regexCache[pattern]
+	if !ok {
+		regex, err = pcre.Compile(pattern)
+		if err != nil {
+			cacheMtx.Unlock()
+			return nil, err
+		}
+		regexCache[pattern] = regex
+	}
+	cacheMtx.Unlock()
+
+	result := regex.ReplaceAllString(text, replacement)
+	return starlark.String(result), nil
 }

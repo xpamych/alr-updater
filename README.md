@@ -43,7 +43,7 @@ ALR-Updater — это модульный бот, предназначенный
 
 ```bash
 # Клонирование репозитория
-git clone https://github.com/your-username/ALR-updater.git
+git clone https://gitea.plemya-x.ru/Plemya-x/ALR-updater.git
 cd ALR-updater
 
 # Сборка
@@ -70,7 +70,7 @@ sudo cp alr-updater.example.toml /etc/alr-updater/config.toml
 
 ```toml
 [git]
-  repoURL = "https://gitverse.ru/Xpamych/xpamych-alr-repo"
+  repoURL = "https://gitea.plemya-x.ru/Plemya-x/alr-repo.git"
   repoDir = "/etc/alr-updater/repo"
   
   [git.commit]
@@ -411,7 +411,7 @@ def update_package_with_notification(package_name, new_version):
 Вы можете использовать переменные окружения вместо файла конфигурации:
 
 ```bash
-export GIT_REPO_URL="https://gitverse.ru/Xpamych/xpamych-alr-repo"
+export GIT_REPO_URL="https://gitea.plemya-x.ru/Plemya-x/alr-repo.git"
 export GIT_REPO_DIR="/tmp/alr-repo"
 export GIT_COMMIT_NAME="ALR Updater"
 export GIT_COMMIT_EMAIL="bot@example.com"

@@ -1,6 +1,6 @@
 /*
- * LURE Updater - Automated updater bot for LURE packages
- * Copyright (C) 2023 Elara Musayelyan
+ * ALR Updater - Automated updater bot for ALR packages
+ * Copyright (C) 2025 The ALR Authors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,7 +21,7 @@ package builtins
 import (
 	"net/http"
 
-	"lure.sh/lure-updater/internal/config"
+	"gitea.plemya-x.ru/Plemya-x/ALR-updater/internal/config"
 	"go.etcd.io/bbolt"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkjson"
@@ -35,7 +35,7 @@ type Options struct {
 }
 
 func Register(sd starlark.StringDict, opts *Options) {
-	sd["run_every"] = starlark.NewBuiltin("run_every", runEvery)
+	sd["run_every"] = runEveryModule
 	sd["sleep"] = starlark.NewBuiltin("sleep", sleep)
 	sd["http"] = httpModule
 	sd["regex"] = regexModule

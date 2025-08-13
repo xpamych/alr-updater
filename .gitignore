@@ -1,7 +1,8 @@
-/lure-updater.toml
-/lure-updater
+/alr-updater.toml
+/alr-updater
 /dist/
 *.star
-.gigaide
-.idea
-.claude
+.gigaide/
+.idea/
+.claude/
+CLAUDE.md

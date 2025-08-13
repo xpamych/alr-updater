@@ -1,4 +1,4 @@
-module lure.sh/lure-updater
+module gitea.plemya-x.ru/Plemya-x/ALR-updater
 
 go 1.20
 

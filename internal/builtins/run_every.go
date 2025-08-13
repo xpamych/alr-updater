@@ -1,6 +1,6 @@
 /*
- * LURE Updater - Automated updater bot for LURE packages
- * Copyright (C) 2023 Elara Musayelyan
+ * ALR Updater - Automated updater bot for ALR packages
+ * Copyright (C) 2025 The ALR Authors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -99,4 +99,77 @@ func newTickerHandle(handle int) starlark.Value {
 	return starlarkstruct.FromStringDict(starlarkstruct.Default, starlark.StringDict{
 		"stop": stopTicker(handle),
 	})
+}
+
+var runEveryModule = &starlarkstruct.Module{
+	Name: "run_every",
+	Members: starlark.StringDict{
+		"minute": starlark.NewBuiltin("run_every.minute", runEveryMinute),
+		"hour":   starlark.NewBuiltin("run_every.hour", runEveryHour),
+		"day":    starlark.NewBuiltin("run_every.day", runEveryDay),
+		"week":   starlark.NewBuiltin("run_every.week", runEveryWeek),
+	},
+}
+
+func runEveryMinute(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var fn *starlark.Function
+	err := starlark.UnpackArgs("run_every.minute", args, kwargs, "function", &fn)
+	if err != nil {
+		return nil, err
+	}
+	return runScheduled(thread, fn, "1m")
+}
+
+func runEveryHour(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var fn *starlark.Function
+	err := starlark.UnpackArgs("run_every.hour", args, kwargs, "function", &fn)
+	if err != nil {
+		return nil, err
+	}
+	return runScheduled(thread, fn, "1h")
+}
+
+func runEveryDay(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var fn *starlark.Function
+	err := starlark.UnpackArgs("run_every.day", args, kwargs, "function", &fn)
+	if err != nil {
+		return nil, err
+	}
+	return runScheduled(thread, fn, "24h")
+}
+
+func runEveryWeek(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var fn *starlark.Function
+	err := starlark.UnpackArgs("run_every.week", args, kwargs, "function", &fn)
+	if err != nil {
+		return nil, err
+	}
+	return runScheduled(thread, fn, "168h")
+}
+
+func runScheduled(thread *starlark.Thread, fn *starlark.Function, duration string) (starlark.Value, error) {
+	d, err := time.ParseDuration(duration)
+	if err != nil {
+		return nil, err
+	}
+
+	tickerMtx.Lock()
+	t := time.NewTicker(d)
+	handle := tickerCount
+	tickers[handle] = t
+	tickerCount++
+	tickerMtx.Unlock()
+	log.Debug("Created new scheduled ticker").Int("handle", handle).Str("duration", duration).Stringer("pos", thread.CallFrame(1).Pos).Send()
+
+	go func() {
+		for range t.C {
+			log.Debug("Calling scheduled function").Str("name", fn.Name()).Stringer("pos", fn.Position()).Send()
+			_, err := starlark.Call(thread, fn, nil, nil)
+			if err != nil {
+				log.Warn("Error while executing scheduled function").Str("name", fn.Name()).Stringer("pos", fn.Position()).Err(err).Send()
+			}
+		}
+	}()
+
+	return newTickerHandle(handle), nil
 }
