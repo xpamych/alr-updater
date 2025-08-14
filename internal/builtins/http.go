@@ -173,10 +173,14 @@ func makeRequest(name, method string, args starlark.Tuple, kwargs []starlark.Tup
 }
 
 func starlarkResponse(res *http.Response) *starlarkstruct.Struct {
+	reader := newStarlarkReader(res.Body)
 	return starlarkstruct.FromStringDict(starlarkstruct.Default, starlark.StringDict{
 		"code":    starlark.MakeInt(res.StatusCode),
 		"headers": starlarkStringSliceMap(res.Header),
-		"body":    newStarlarkReader(res.Body),
+		"body":    reader,
+		"json": starlark.NewBuiltin("response.json", func(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+			return reader.readJSON(thread, b, args, kwargs)
+		}),
 	})
 }
 
