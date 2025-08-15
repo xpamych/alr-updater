@@ -24,7 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
+	"sync"
 
 	"github.com/caarlos0/env/v8"
 	"github.com/go-git/go-git/v5"
@@ -156,14 +156,17 @@ func main() {
 		if len(registeredFns) > 0 {
 			log.Info("Running all registered plugin checks immediately").Int("functions", len(registeredFns)).Send()
 			
+			var wg sync.WaitGroup
 			for key, fn := range registeredFns {
 				parts := strings.Split(key, ":")
 				pluginName := parts[0]
 				
 				log.Info("Executing registered function").Str("plugin", pluginName).Str("function", fn.Name()).Send()
 				
+				wg.Add(1)
 				// Запускаем функцию в горутине для параллельного выполнения
 				go func(function *starlark.Function, plugin string) {
+					defer wg.Done()
 					thread := &starlark.Thread{Name: plugin}
 					_, err := starlark.Call(thread, function, nil, nil)
 					if err != nil {
@@ -174,11 +177,14 @@ func main() {
 				}(fn, pluginName)
 			}
 			
-			// Даём время на выполнение функций
+			// Ждём завершения всех функций
 			log.Info("Waiting for immediate checks to complete...").Send()
-			time.Sleep(5 * time.Second)
+			wg.Wait()
+			log.Info("All checks completed, exiting").Send()
+			return // Выходим после выполнения всех проверок
 		} else {
 			log.Warn("No functions registered with run_every, nothing to run immediately").Send()
+			return
 		}
 	}
 
