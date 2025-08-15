@@ -31,6 +31,9 @@ var (
 	tickerMtx   = &sync.Mutex{}
 	tickerCount = 0
 	tickers     = map[int]*time.Ticker{}
+	// Для хранения зарегистрированных функций
+	registeredFunctions = map[string]*starlark.Function{}
+	registeredFnMtx     = &sync.RWMutex{}
 )
 
 func runEvery(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
@@ -148,6 +151,12 @@ func runEveryWeek(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tu
 }
 
 func runScheduled(thread *starlark.Thread, fn *starlark.Function, duration string) (starlark.Value, error) {
+	// Сохраняем функцию для возможности немедленного запуска
+	registeredFnMtx.Lock()
+	functionKey := thread.Name + ":" + fn.Name()
+	registeredFunctions[functionKey] = fn
+	registeredFnMtx.Unlock()
+
 	d, err := time.ParseDuration(duration)
 	if err != nil {
 		return nil, err
@@ -172,4 +181,16 @@ func runScheduled(thread *starlark.Thread, fn *starlark.Function, duration strin
 	}()
 
 	return newTickerHandle(handle), nil
+}
+
+// GetRegisteredFunctions возвращает все зарегистрированные функции
+func GetRegisteredFunctions() map[string]*starlark.Function {
+	registeredFnMtx.RLock()
+	defer registeredFnMtx.RUnlock()
+	
+	result := make(map[string]*starlark.Function)
+	for k, v := range registeredFunctions {
+		result[k] = v
+	}
+	return result
 }

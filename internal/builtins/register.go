@@ -32,6 +32,7 @@ type Options struct {
 	DB     *bbolt.DB
 	Config *config.Config
 	Mux    *http.ServeMux
+	RunNow bool
 }
 
 func Register(sd starlark.StringDict, opts *Options) {

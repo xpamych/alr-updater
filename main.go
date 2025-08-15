@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/caarlos0/env/v8"
 	"github.com/go-git/go-git/v5"
@@ -51,6 +52,7 @@ func main() {
 	genHash := pflag.BoolP("gen-hash", "g", false, "Generate a password hash for webhooks")
 	useEnv := pflag.BoolP("use-env", "E", false, "Use environment variables for configuration")
 	debug := pflag.BoolP("debug", "D", false, "Enable debug logging")
+	runNow := pflag.BoolP("now", "n", false, "Run all plugin checks immediately on startup")
 	pflag.Parse()
 
 	if *debug {
@@ -135,6 +137,7 @@ func main() {
 			Config: cfg,
 			DB:     db,
 			Mux:    mux,
+			RunNow: *runNow,
 		})
 
 		_, err = starlark.ExecFile(thread, starFile, nil, predeclared)
@@ -143,6 +146,40 @@ func main() {
 		}
 
 		log.Info("Initialized plugin").Str("name", pluginName).Send()
+	}
+
+	// Запускаем все зарегистрированные функции немедленно если установлен флаг --now
+	if *runNow {
+		// Получаем все функции, зарегистрированные через run_every
+		registeredFns := builtins.GetRegisteredFunctions()
+		
+		if len(registeredFns) > 0 {
+			log.Info("Running all registered plugin checks immediately").Int("functions", len(registeredFns)).Send()
+			
+			for key, fn := range registeredFns {
+				parts := strings.Split(key, ":")
+				pluginName := parts[0]
+				
+				log.Info("Executing registered function").Str("plugin", pluginName).Str("function", fn.Name()).Send()
+				
+				// Запускаем функцию в горутине для параллельного выполнения
+				go func(function *starlark.Function, plugin string) {
+					thread := &starlark.Thread{Name: plugin}
+					_, err := starlark.Call(thread, function, nil, nil)
+					if err != nil {
+						log.Error("Error executing function").Str("plugin", plugin).Str("function", function.Name()).Err(err).Send()
+					} else {
+						log.Info("Function executed successfully").Str("plugin", plugin).Str("function", function.Name()).Send()
+					}
+				}(fn, pluginName)
+			}
+			
+			// Даём время на выполнение функций
+			log.Info("Waiting for immediate checks to complete...").Send()
+			time.Sleep(5 * time.Second)
+		} else {
+			log.Warn("No functions registered with run_every, nothing to run immediately").Send()
+		}
 	}
 
 	log.Info("Starting HTTP server").Str("addr", *serverAddr).Send()
