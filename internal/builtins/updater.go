@@ -22,6 +22,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -183,12 +184,22 @@ func writePackageFile(cfg *config.Config) *starlark.Builtin {
 		defer repoMtx.Unlock()
 
 		path := filepath.Join(cfg.Git.RepoDir, pkg, filename)
+		
+		// Читаем старый файл для сравнения версий
+		var oldContent string
+		if oldData, err := os.ReadFile(path); err == nil {
+			oldContent = string(oldData)
+		}
+		
+		// Автоматически сбрасываем release='1' при изменении версии
+		finalContent := autoResetRelease(oldContent, content)
+		
 		fl, err := os.Create(path)
 		if err != nil {
 			return nil, err
 		}
 
-		_, err = io.Copy(fl, strings.NewReader(content))
+		_, err = io.Copy(fl, strings.NewReader(finalContent))
 		if err != nil {
 			return nil, err
 		}
@@ -196,4 +207,31 @@ func writePackageFile(cfg *config.Config) *starlark.Builtin {
 		log.Debug("Wrote package file").Str("package", pkg).Str("filename", filename).Stringer("pos", thread.CallFrame(1).Pos).Send()
 		return starlark.None, nil
 	})
+}
+
+// autoResetRelease автоматически сбрасывает release='1' при изменении версии
+func autoResetRelease(oldContent, newContent string) string {
+	// Извлекаем версии из старого и нового содержимого
+	versionRegex := regexp.MustCompile(`version='([^']+)'`)
+	
+	oldVersionMatch := versionRegex.FindStringSubmatch(oldContent)
+	newVersionMatch := versionRegex.FindStringSubmatch(newContent)
+	
+	// Если версии нет в одном из файлов, возвращаем новое содержимое как есть
+	if len(oldVersionMatch) < 2 || len(newVersionMatch) < 2 {
+		return newContent
+	}
+	
+	oldVersion := oldVersionMatch[1]
+	newVersion := newVersionMatch[1]
+	
+	// Если версия изменилась, сбрасываем release на '1'
+	if oldVersion != newVersion {
+		releaseRegex := regexp.MustCompile(`release='[^']+'`)
+		if releaseRegex.MatchString(newContent) {
+			return releaseRegex.ReplaceAllString(newContent, "release='1'")
+		}
+	}
+	
+	return newContent
 }
