@@ -23,8 +23,16 @@ func Convert(v any) (starlark.Value, error) {
 }
 
 func convert(val reflect.Value) (starlark.Value, error) {
+	// Check for invalid or nil values
+	if !val.IsValid() {
+		return starlark.None, nil
+	}
+	
 	switch val.Kind() {
 	case reflect.Interface:
+		if val.IsNil() {
+			return starlark.None, nil
+		}
 		return convert(val.Elem())
 	case reflect.Int, reflect.Int64, reflect.Int32, reflect.Int16, reflect.Int8:
 		return starlark.MakeInt64(val.Int()), nil
@@ -37,9 +45,20 @@ func convert(val reflect.Value) (starlark.Value, error) {
 	case reflect.String:
 		return starlark.String(val.String()), nil
 	case reflect.Slice, reflect.Array:
+		if val.IsNil() {
+			return starlark.None, nil
+		}
 		return convertSlice(val)
 	case reflect.Map:
+		if val.IsNil() {
+			return starlark.None, nil
+		}
 		return convertMap(val)
+	case reflect.Ptr:
+		if val.IsNil() {
+			return starlark.None, nil
+		}
+		return convert(val.Elem())
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrInvalidType, val.Type())
 	}
