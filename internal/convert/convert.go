@@ -28,6 +28,11 @@ func convert(val reflect.Value) (starlark.Value, error) {
 		return starlark.None, nil
 	}
 	
+	// Check for zero value (uninitialized)
+	if val == (reflect.Value{}) {
+		return starlark.None, nil
+	}
+	
 	switch val.Kind() {
 	case reflect.Interface:
 		if val.IsNil() {
