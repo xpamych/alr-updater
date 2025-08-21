@@ -19,6 +19,7 @@
 package builtins
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -45,6 +46,7 @@ func updaterModule(cfg *config.Config) *starlarkstruct.Module {
 			"push_changes":       updaterPushChanges(cfg),
 			"get_package_file":   getPackageFile(cfg),
 			"write_package_file": writePackageFile(cfg),
+			"update_checksums":   updateChecksums(cfg),
 		},
 	}
 }
@@ -234,4 +236,96 @@ func autoResetRelease(oldContent, newContent string) string {
 	}
 	
 	return newContent
+}
+
+// updateChecksumsInContent обновляет значения checksums в содержимом файла
+func updateChecksumsInContent(content string, checksums []string) string {
+	// Паттерн для поиска массива checksums
+	checksumsRegex := regexp.MustCompile(`checksums=\((.*?)\)`)
+	
+	// Формируем новый массив checksums
+	var newChecksumsArray string
+	if len(checksums) == 1 && checksums[0] != "" {
+		// Если одна хеш-сумма, форматируем как ('hash')
+		newChecksumsArray = fmt.Sprintf("('%s')", checksums[0])
+	} else if len(checksums) > 1 {
+		// Если несколько хеш-сумм, форматируем как ('hash1' 'hash2' ...)
+		quotedChecksums := make([]string, len(checksums))
+		for i, cs := range checksums {
+			quotedChecksums[i] = fmt.Sprintf("'%s'", cs)
+		}
+		newChecksumsArray = "(" + strings.Join(quotedChecksums, " ") + ")"
+	} else {
+		// Если нет хеш-сумм, оставляем SKIP
+		newChecksumsArray = "('SKIP')"
+	}
+	
+	// Заменяем старый массив checksums на новый
+	newContent := checksumsRegex.ReplaceAllString(content, "checksums="+newChecksumsArray)
+	
+	return newContent
+}
+
+func updateChecksums(cfg *config.Config) *starlark.Builtin {
+	return starlark.NewBuiltin("updater.update_checksums", func(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		var pkg, filename, content string
+		var checksums *starlark.List
+		err := starlark.UnpackArgs("updater.update_checksums", args, kwargs, 
+			"pkg", &pkg, 
+			"filename", &filename, 
+			"content", &content,
+			"checksums", &checksums)
+		if err != nil {
+			return nil, err
+		}
+
+		// Конвертируем starlark.List в []string
+		checksumStrings := make([]string, 0, checksums.Len())
+		iter := checksums.Iterate()
+		defer iter.Done()
+		var val starlark.Value
+		for iter.Next(&val) {
+			if s, ok := val.(starlark.String); ok {
+				checksumStrings = append(checksumStrings, string(s))
+			}
+		}
+
+		// Обновляем checksums в содержимом
+		updatedContent := updateChecksumsInContent(content, checksumStrings)
+		
+		// Автоматически сбрасываем release='1' при изменении версии
+		repoMtx.Lock()
+		defer repoMtx.Unlock()
+		
+		path := filepath.Join(cfg.Git.RepoDir, pkg, filename)
+		
+		// Читаем старый файл для сравнения версий
+		var oldContent string
+		if oldData, err := os.ReadFile(path); err == nil {
+			oldContent = string(oldData)
+		}
+		
+		// Применяем autoResetRelease
+		finalContent := autoResetRelease(oldContent, updatedContent)
+		
+		// Записываем файл
+		fl, err := os.Create(path)
+		if err != nil {
+			return nil, err
+		}
+		defer fl.Close()
+
+		_, err = io.Copy(fl, strings.NewReader(finalContent))
+		if err != nil {
+			return nil, err
+		}
+
+		log.Debug("Updated package file with checksums").
+			Str("package", pkg).
+			Str("filename", filename).
+			Int("checksums_count", len(checksumStrings)).
+			Stringer("pos", thread.CallFrame(1).Pos).Send()
+		
+		return starlark.None, nil
+	})
 }
