@@ -41,7 +41,7 @@ func updaterModule(cfg *config.Config) *starlarkstruct.Module {
 	return &starlarkstruct.Module{
 		Name: "updater",
 		Members: starlark.StringDict{
-			"repo_dir":           starlark.String(cfg.Git.RepoDir),
+			"repos_base_dir":     starlark.String(cfg.ReposBaseDir),
 			"pull":               updaterPull(cfg),
 			"push_changes":       updaterPushChanges(cfg),
 			"get_package_file":   getPackageFile(cfg),
@@ -57,10 +57,22 @@ var repoMtx = &sync.Mutex{}
 
 func updaterPull(cfg *config.Config) *starlark.Builtin {
 	return starlark.NewBuiltin("updater.pull", func(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		var repoName string
+		err := starlark.UnpackArgs("updater.pull", args, kwargs, "repo", &repoName)
+		if err != nil {
+			return nil, err
+		}
+
+		repoConfig, exists := cfg.Repositories[repoName]
+		if !exists {
+			return nil, fmt.Errorf("repository '%s' not found in configuration", repoName)
+		}
+
 		repoMtx.Lock()
 		defer repoMtx.Unlock()
 
-		repo, err := git.PlainOpen(cfg.Git.RepoDir)
+		repoDir := filepath.Join(cfg.ReposBaseDir, repoName)
+		repo, err := git.PlainOpen(repoDir)
 		if err != nil {
 			return nil, err
 		}
@@ -75,22 +87,29 @@ func updaterPull(cfg *config.Config) *starlark.Builtin {
 			return nil, err
 		}
 
+		_ = repoConfig // Избегаем неиспользованной переменной
 		return starlark.None, nil
 	})
 }
 
 func updaterPushChanges(cfg *config.Config) *starlark.Builtin {
 	return starlark.NewBuiltin("updater.push_changes", func(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-		var msg string
-		err := starlark.UnpackArgs("updater.push_changes", args, kwargs, "msg", &msg)
+		var repoName, msg string
+		err := starlark.UnpackArgs("updater.push_changes", args, kwargs, "repo", &repoName, "msg", &msg)
 		if err != nil {
 			return nil, err
+		}
+
+		repoConfig, exists := cfg.Repositories[repoName]
+		if !exists {
+			return nil, fmt.Errorf("repository '%s' not found in configuration", repoName)
 		}
 
 		repoMtx.Lock()
 		defer repoMtx.Unlock()
 
-		repo, err := git.PlainOpen(cfg.Git.RepoDir)
+		repoDir := filepath.Join(cfg.ReposBaseDir, repoName)
+		repo, err := git.PlainOpen(repoDir)
 		if err != nil {
 			return nil, err
 		}
@@ -120,8 +139,8 @@ func updaterPushChanges(cfg *config.Config) *starlark.Builtin {
 		}
 
 		sig := &object.Signature{
-			Name:  cfg.Git.Commit.Name,
-			Email: cfg.Git.Commit.Email,
+			Name:  repoConfig.Commit.Name,
+			Email: repoConfig.Commit.Email,
 			When:  time.Now(),
 		}
 
@@ -138,15 +157,15 @@ func updaterPushChanges(cfg *config.Config) *starlark.Builtin {
 		err = repo.Push(&git.PushOptions{
 			Progress: os.Stderr,
 			Auth: &http.BasicAuth{
-				Username: cfg.Git.Credentials.Username,
-				Password: cfg.Git.Credentials.Password,
+				Username: repoConfig.Credentials.Username,
+				Password: repoConfig.Credentials.Password,
 			},
 		})
 		if err != nil {
 			return nil, err
 		}
 
-		log.Debug("Successfully pushed to repo").Stringer("pos", thread.CallFrame(1).Pos).Send()
+		log.Debug("Successfully pushed to repo").Str("repo", repoName).Stringer("pos", thread.CallFrame(1).Pos).Send()
 
 		return starlark.None, nil
 	})
@@ -154,38 +173,50 @@ func updaterPushChanges(cfg *config.Config) *starlark.Builtin {
 
 func getPackageFile(cfg *config.Config) *starlark.Builtin {
 	return starlark.NewBuiltin("updater.get_package_file", func(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-		var pkg, filename string
-		err := starlark.UnpackArgs("updater.get_package_file", args, kwargs, "pkg", &pkg, "filename", &filename)
+		var repoName, pkg, filename string
+		err := starlark.UnpackArgs("updater.get_package_file", args, kwargs, "repo", &repoName, "pkg", &pkg, "filename", &filename)
 		if err != nil {
 			return nil, err
+		}
+
+		_, exists := cfg.Repositories[repoName]
+		if !exists {
+			return nil, fmt.Errorf("repository '%s' not found in configuration", repoName)
 		}
 
 		repoMtx.Lock()
 		defer repoMtx.Unlock()
 
-		path := filepath.Join(cfg.Git.RepoDir, pkg, filename)
+		repoDir := filepath.Join(cfg.ReposBaseDir, repoName)
+		path := filepath.Join(repoDir, pkg, filename)
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return nil, err
 		}
 
-		log.Debug("Got package file").Str("package", pkg).Str("filename", filename).Stringer("pos", thread.CallFrame(1).Pos).Send()
+		log.Debug("Got package file").Str("repo", repoName).Str("package", pkg).Str("filename", filename).Stringer("pos", thread.CallFrame(1).Pos).Send()
 		return starlark.String(data), nil
 	})
 }
 
 func writePackageFile(cfg *config.Config) *starlark.Builtin {
 	return starlark.NewBuiltin("updater.write_package_file", func(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-		var pkg, filename, content string
-		err := starlark.UnpackArgs("updater.write_package_file", args, kwargs, "pkg", &pkg, "filename", &filename, "content", &content)
+		var repoName, pkg, filename, content string
+		err := starlark.UnpackArgs("updater.write_package_file", args, kwargs, "repo", &repoName, "pkg", &pkg, "filename", &filename, "content", &content)
 		if err != nil {
 			return nil, err
+		}
+
+		_, exists := cfg.Repositories[repoName]
+		if !exists {
+			return nil, fmt.Errorf("repository '%s' not found in configuration", repoName)
 		}
 
 		repoMtx.Lock()
 		defer repoMtx.Unlock()
 
-		path := filepath.Join(cfg.Git.RepoDir, pkg, filename)
+		repoDir := filepath.Join(cfg.ReposBaseDir, repoName)
+		path := filepath.Join(repoDir, pkg, filename)
 		
 		// Читаем старый файл для сравнения версий
 		var oldContent string
@@ -200,13 +231,14 @@ func writePackageFile(cfg *config.Config) *starlark.Builtin {
 		if err != nil {
 			return nil, err
 		}
+		defer fl.Close()
 
 		_, err = io.Copy(fl, strings.NewReader(finalContent))
 		if err != nil {
 			return nil, err
 		}
 
-		log.Debug("Wrote package file").Str("package", pkg).Str("filename", filename).Stringer("pos", thread.CallFrame(1).Pos).Send()
+		log.Debug("Wrote package file").Str("repo", repoName).Str("package", pkg).Str("filename", filename).Stringer("pos", thread.CallFrame(1).Pos).Send()
 		return starlark.None, nil
 	})
 }
@@ -268,15 +300,21 @@ func updateChecksumsInContent(content string, checksums []string) string {
 
 func updateChecksums(cfg *config.Config) *starlark.Builtin {
 	return starlark.NewBuiltin("updater.update_checksums", func(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-		var pkg, filename, content string
+		var repoName, pkg, filename, content string
 		var checksums *starlark.List
 		err := starlark.UnpackArgs("updater.update_checksums", args, kwargs, 
+			"repo", &repoName,
 			"pkg", &pkg, 
 			"filename", &filename, 
 			"content", &content,
 			"checksums", &checksums)
 		if err != nil {
 			return nil, err
+		}
+
+		_, exists := cfg.Repositories[repoName]
+		if !exists {
+			return nil, fmt.Errorf("repository '%s' not found in configuration", repoName)
 		}
 
 		// Конвертируем starlark.List в []string
@@ -297,7 +335,8 @@ func updateChecksums(cfg *config.Config) *starlark.Builtin {
 		repoMtx.Lock()
 		defer repoMtx.Unlock()
 		
-		path := filepath.Join(cfg.Git.RepoDir, pkg, filename)
+		repoDir := filepath.Join(cfg.ReposBaseDir, repoName)
+		path := filepath.Join(repoDir, pkg, filename)
 		
 		// Читаем старый файл для сравнения версий
 		var oldContent string
@@ -321,6 +360,7 @@ func updateChecksums(cfg *config.Config) *starlark.Builtin {
 		}
 
 		log.Debug("Updated package file with checksums").
+			Str("repo", repoName).
 			Str("package", pkg).
 			Str("filename", filename).
 			Int("checksums_count", len(checksumStrings)).

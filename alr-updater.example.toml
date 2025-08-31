@@ -1,14 +1,27 @@
-[git]
+# Базовый каталог для хранения всех репозиториев
+reposBaseDir = "/var/cache/alr-updater"
+
+# Конфигурация репозиториев (можно настроить несколько)
+[repositories.alr-repo]
   repoURL = "https://gitea.plemya-x.ru/Plemya-x/alr-repo.git"
-  repoDir = "/etc/alr-updater/repo"
-  [git.commit]
+  [repositories.alr-repo.commit]
     # Имя и адрес электронной почты, которые будут использоваться при фиксации git
     name = "CHANGE ME"
     email = "CHANGE ME"
-  [git.credentials]
+  [repositories.alr-repo.credentials]
     # Имя пользователя и пароль для git push. Используйте личный токен доступа в качестве пароля для Gitea.
     username = "CHANGE ME"
     password = "CHANGE ME"
+
+# Можно добавить дополнительные репозитории
+# [repositories.another-repo]
+#   repoURL = "https://github.com/example/another-repo.git"
+#   [repositories.another-repo.commit]
+#     name = "Bot User"
+#     email = "bot@example.com"
+#   [repositories.another-repo.credentials]
+#     username = "bot-user"
+#     password = "github-token"
 
 [webhook]
   # Хэш пароля для webhook. Сгенерируйте его, используя `alr-updater -g`.
