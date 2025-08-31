@@ -19,10 +19,12 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -44,9 +46,39 @@ func init() {
 	log.Logger = logger.NewPretty(os.Stderr)
 }
 
+// parseRepositoryFromPlugin парсит комментарий '# Repository: repo-name' из .star файла
+func parseRepositoryFromPlugin(filePath string) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	repoRegex := regexp.MustCompile(`^#\s*Repository:\s*(.+?)\s*$`)
+	
+	// Читаем первые несколько строк файла
+	lineCount := 0
+	for scanner.Scan() && lineCount < 10 {
+		line := strings.TrimSpace(scanner.Text())
+		lineCount++
+		
+		if matches := repoRegex.FindStringSubmatch(line); matches != nil {
+			return strings.TrimSpace(matches[1]), nil
+		}
+		
+		// Если встретили строку без комментария, прекращаем поиск
+		if line != "" && !strings.HasPrefix(line, "#") {
+			break
+		}
+	}
+
+	return "", scanner.Err()
+}
+
 func main() {
 	configPath := pflag.StringP("config", "c", "/etc/alr-updater/config.toml", "Path to config file")
-	dbPath := pflag.StringP("database", "d", "/etc/alr-updater/db", "Path to database file")
+	dbPath := pflag.StringP("database", "d", "/var/lib/alr-updater/db", "Path to database file")
 	pluginDir := pflag.StringP("plugin-dir", "p", "/etc/alr-updater/plugins", "Path to plugin directory")
 	serverAddr := pflag.StringP("address", "a", ":8080", "Webhook server address")
 	genHash := pflag.BoolP("gen-hash", "g", false, "Generate a password hash for webhooks")
@@ -99,21 +131,51 @@ func main() {
 		}
 	}
 
-	if _, err := os.Stat(cfg.Git.RepoDir); os.IsNotExist(err) {
-		err = os.MkdirAll(cfg.Git.RepoDir, 0o755)
+	// Создаем базовый каталог для репозиториев
+	if cfg.ReposBaseDir == "" {
+		cfg.ReposBaseDir = "/var/cache/alr-updater"
+	}
+	
+	if _, err := os.Stat(cfg.ReposBaseDir); os.IsNotExist(err) {
+		err = os.MkdirAll(cfg.ReposBaseDir, 0o755)
 		if err != nil {
-			log.Fatal("Error creating repository directory").Err(err).Send()
-		}
-
-		_, err := git.PlainClone(cfg.Git.RepoDir, false, &git.CloneOptions{
-			URL:      cfg.Git.RepoURL,
-			Progress: os.Stderr,
-		})
-		if err != nil {
-			log.Fatal("Error cloning repository").Err(err).Send()
+			log.Fatal("Error creating repositories base directory").Err(err).Send()
 		}
 	} else if err != nil {
-		log.Fatal("Cannot stat configured repo directory").Err(err).Send()
+		log.Fatal("Cannot stat configured repos base directory").Err(err).Send()
+	}
+
+	// Клонируем все сконфигурированные репозитории
+	for repoName, repoConfig := range cfg.Repositories {
+		repoDir := filepath.Join(cfg.ReposBaseDir, repoName)
+		
+		if _, err := os.Stat(repoDir); os.IsNotExist(err) {
+			log.Info("Cloning repository").Str("name", repoName).Str("url", repoConfig.RepoURL).Send()
+			
+			err = os.MkdirAll(repoDir, 0o755)
+			if err != nil {
+				log.Fatal("Error creating repository directory").Str("repo", repoName).Err(err).Send()
+			}
+
+			_, err := git.PlainClone(repoDir, false, &git.CloneOptions{
+				URL:      repoConfig.RepoURL,
+				Progress: os.Stderr,
+			})
+			if err != nil {
+				log.Fatal("Error cloning repository").Str("repo", repoName).Err(err).Send()
+			}
+			
+			log.Info("Repository cloned successfully").Str("name", repoName).Send()
+		} else if err != nil {
+			log.Fatal("Cannot stat repository directory").Str("repo", repoName).Err(err).Send()
+		} else {
+			log.Info("Repository already exists").Str("name", repoName).Send()
+		}
+	}
+	
+	// Проверяем, что есть хотя бы один репозиторий
+	if len(cfg.Repositories) == 0 {
+		log.Fatal("No repositories configured. At least one repository is required.").Send()
 	}
 
 	starFiles, err := filepath.Glob(filepath.Join(*pluginDir, "*.star"))
@@ -129,9 +191,26 @@ func main() {
 
 	for _, starFile := range starFiles {
 		pluginName := filepath.Base(strings.TrimSuffix(starFile, ".star"))
+		
+		// Парсим комментарий Repository из файла плагина
+		repoName, err := parseRepositoryFromPlugin(starFile)
+		if err != nil {
+			log.Fatal("Error parsing repository from plugin").Str("file", starFile).Err(err).Send()
+		}
+		if repoName == "" {
+			log.Fatal("Plugin must specify repository").Str("file", starFile).Msg("Add '# Repository: repo-name' comment at the top")
+		}
+		
+		// Проверяем, что указанный репозиторий существует в конфигурации
+		if _, exists := cfg.Repositories[repoName]; !exists {
+			log.Fatal("Repository not found in configuration").Str("plugin", pluginName).Str("repository", repoName).Send()
+		}
+		
 		thread := &starlark.Thread{Name: pluginName}
 
-		predeclared := starlark.StringDict{}
+		predeclared := starlark.StringDict{
+			"REPO": starlark.String(repoName), // Передаем имя репозитория как глобальную переменную
+		}
 		builtins.Register(predeclared, &builtins.Options{
 			Name:   pluginName,
 			Config: cfg,
@@ -145,7 +224,7 @@ func main() {
 			log.Fatal("Error executing starlark file").Str("file", starFile).Err(err).Send()
 		}
 
-		log.Info("Initialized plugin").Str("name", pluginName).Send()
+		log.Info("Initialized plugin").Str("name", pluginName).Str("repository", repoName).Send()
 	}
 
 	// Запускаем все зарегистрированные функции немедленно если установлен флаг --now
