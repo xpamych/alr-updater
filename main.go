@@ -56,17 +56,17 @@ func parseRepositoryFromPlugin(filePath string) (string, error) {
 
 	scanner := bufio.NewScanner(file)
 	repoRegex := regexp.MustCompile(`^#\s*Repository:\s*(.+?)\s*$`)
-	
+
 	// Читаем первые несколько строк файла
 	lineCount := 0
 	for scanner.Scan() && lineCount < 10 {
 		line := strings.TrimSpace(scanner.Text())
 		lineCount++
-		
+
 		if matches := repoRegex.FindStringSubmatch(line); matches != nil {
 			return strings.TrimSpace(matches[1]), nil
 		}
-		
+
 		// Если встретили строку без комментария, прекращаем поиск
 		if line != "" && !strings.HasPrefix(line, "#") {
 			break
@@ -135,7 +135,7 @@ func main() {
 	if cfg.ReposBaseDir == "" {
 		cfg.ReposBaseDir = "/var/cache/alr-updater"
 	}
-	
+
 	if _, err := os.Stat(cfg.ReposBaseDir); os.IsNotExist(err) {
 		err = os.MkdirAll(cfg.ReposBaseDir, 0o755)
 		if err != nil {
@@ -148,10 +148,10 @@ func main() {
 	// Клонируем все сконфигурированные репозитории
 	for repoName, repoConfig := range cfg.Repositories {
 		repoDir := filepath.Join(cfg.ReposBaseDir, repoName)
-		
+
 		if _, err := os.Stat(repoDir); os.IsNotExist(err) {
 			log.Info("Cloning repository").Str("name", repoName).Str("url", repoConfig.RepoURL).Send()
-			
+
 			err = os.MkdirAll(repoDir, 0o755)
 			if err != nil {
 				log.Fatal("Error creating repository directory").Str("repo", repoName).Err(err).Send()
@@ -164,7 +164,7 @@ func main() {
 			if err != nil {
 				log.Fatal("Error cloning repository").Str("repo", repoName).Err(err).Send()
 			}
-			
+
 			log.Info("Repository cloned successfully").Str("name", repoName).Send()
 		} else if err != nil {
 			log.Fatal("Cannot stat repository directory").Str("repo", repoName).Err(err).Send()
@@ -172,7 +172,7 @@ func main() {
 			log.Info("Repository already exists").Str("name", repoName).Send()
 		}
 	}
-	
+
 	// Проверяем, что есть хотя бы один репозиторий
 	if len(cfg.Repositories) == 0 {
 		log.Fatal("No repositories configured. At least one repository is required.").Send()
@@ -191,7 +191,7 @@ func main() {
 
 	for _, starFile := range starFiles {
 		pluginName := filepath.Base(strings.TrimSuffix(starFile, ".star"))
-		
+
 		// Парсим комментарий Repository из файла плагина
 		repoName, err := parseRepositoryFromPlugin(starFile)
 		if err != nil {
@@ -200,12 +200,12 @@ func main() {
 		if repoName == "" {
 			log.Fatal("Plugin must specify repository").Str("file", starFile).Str("hint", "Add '# Repository: repo-name' comment at the top").Send()
 		}
-		
+
 		// Проверяем, что указанный репозиторий существует в конфигурации
 		if _, exists := cfg.Repositories[repoName]; !exists {
 			log.Fatal("Repository not found in configuration").Str("plugin", pluginName).Str("repository", repoName).Send()
 		}
-		
+
 		thread := &starlark.Thread{Name: pluginName}
 
 		predeclared := starlark.StringDict{
