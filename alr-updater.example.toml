@@ -13,15 +13,24 @@ reposBaseDir = "/var/cache/alr-updater"
     username = "CHANGE ME"
     password = "CHANGE ME"
 
-# Можно добавить дополнительные репозитории
-# [repositories.another-repo]
-#   repoURL = "https://github.com/example/another-repo.git"
-#   [repositories.another-repo.commit]
-#     name = "Bot User"
-#     email = "bot@example.com"
-#   [repositories.another-repo.credentials]
-#     username = "bot-user"
-#     password = "github-token"
+# Дополнительные репозитории для мониторинга
+[repositories.alr-LG]
+  repoURL = "https://git.linux-gaming.ru/Linux-Gaming/alr-LG.git"
+  [repositories.alr-LG.commit]
+    name = "CHANGE ME"
+    email = "CHANGE ME"
+  [repositories.alr-LG.credentials]
+    username = "CHANGE ME"
+    password = "CHANGE ME"
+
+[repositories.alr-default]
+  repoURL = "https://gitea.plemya-x.ru/Plemya-x/alr-default.git"
+  [repositories.alr-default.commit]
+    name = "CHANGE ME"
+    email = "CHANGE ME"
+  [repositories.alr-default.credentials]
+    username = "CHANGE ME"
+    password = "CHANGE ME"
 
 [webhook]
   # Хэш пароля для webhook. Сгенерируйте его, используя `alr-updater -g`.
