@@ -116,38 +116,46 @@ var runEveryModule = &starlarkstruct.Module{
 
 func runEveryMinute(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var fn *starlark.Function
-	err := starlark.UnpackArgs("run_every.minute", args, kwargs, "function", &fn)
+	var count int64 = 1
+	err := starlark.UnpackArgs("run_every.minute", args, kwargs, "function", &fn, "count?", &count)
 	if err != nil {
 		return nil, err
 	}
-	return runScheduled(thread, fn, "1m")
+	duration := time.Duration(count) * time.Minute
+	return runScheduled(thread, fn, duration.String())
 }
 
 func runEveryHour(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var fn *starlark.Function
-	err := starlark.UnpackArgs("run_every.hour", args, kwargs, "function", &fn)
+	var count int64 = 1
+	err := starlark.UnpackArgs("run_every.hour", args, kwargs, "function", &fn, "count?", &count)
 	if err != nil {
 		return nil, err
 	}
-	return runScheduled(thread, fn, "1h")
+	duration := time.Duration(count) * time.Hour
+	return runScheduled(thread, fn, duration.String())
 }
 
 func runEveryDay(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var fn *starlark.Function
-	err := starlark.UnpackArgs("run_every.day", args, kwargs, "function", &fn)
+	var count int64 = 1
+	err := starlark.UnpackArgs("run_every.day", args, kwargs, "function", &fn, "count?", &count)
 	if err != nil {
 		return nil, err
 	}
-	return runScheduled(thread, fn, "24h")
+	duration := time.Duration(count) * 24 * time.Hour
+	return runScheduled(thread, fn, duration.String())
 }
 
 func runEveryWeek(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var fn *starlark.Function
-	err := starlark.UnpackArgs("run_every.week", args, kwargs, "function", &fn)
+	var count int64 = 1
+	err := starlark.UnpackArgs("run_every.week", args, kwargs, "function", &fn, "count?", &count)
 	if err != nil {
 		return nil, err
 	}
-	return runScheduled(thread, fn, "168h")
+	duration := time.Duration(count) * 7 * 24 * time.Hour
+	return runScheduled(thread, fn, duration.String())
 }
 
 func runScheduled(thread *starlark.Thread, fn *starlark.Function, duration string) (starlark.Value, error) {

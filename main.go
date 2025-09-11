@@ -36,6 +36,7 @@ import (
 	"go.elara.ws/logger/log"
 	"gitea.plemya-x.ru/Plemya-x/ALR-updater/internal/builtins"
 	"gitea.plemya-x.ru/Plemya-x/ALR-updater/internal/config"
+	"gitea.plemya-x.ru/Plemya-x/ALR-updater/internal/generator"
 	"go.etcd.io/bbolt"
 	"go.starlark.net/starlark"
 	"golang.org/x/crypto/bcrypt"
@@ -85,6 +86,7 @@ func main() {
 	useEnv := pflag.BoolP("use-env", "E", false, "Use environment variables for configuration")
 	debug := pflag.BoolP("debug", "D", false, "Enable debug logging")
 	runNow := pflag.BoolP("now", "n", false, "Run all plugin checks immediately on startup")
+	generatePlugins := pflag.Bool("generate-plugins", false, "Generate missing plugins automatically")
 	pflag.Parse()
 
 	if *debug {
@@ -105,14 +107,10 @@ func main() {
 		return
 	}
 
-	db, err := bbolt.Open(*dbPath, 0o644, nil)
-	if err != nil {
-		log.Fatal("Error opening database").Err(err).Send()
-	}
-
+	// Загружаем конфигурацию сначала для генератора плагинов
 	cfg := &config.Config{}
 	if *useEnv {
-		err = env.Parse(cfg)
+		err := env.Parse(cfg)
 		if err != nil {
 			log.Fatal("Error parsing environment variables").Err(err).Send()
 		}
@@ -125,10 +123,28 @@ func main() {
 		if err != nil {
 			log.Fatal("Error decoding config file").Err(err).Send()
 		}
-		err = fl.Close()
+		fl.Close()
+	}
+
+	// Обработка генерации плагинов
+	if *generatePlugins {
+		log.Info("Starting automatic plugin generation...")
+		gen, err := generator.NewPluginGenerator(cfg, *pluginDir)
 		if err != nil {
-			log.Fatal("Error closing config file").Err(err).Send()
+			log.Fatal("Error creating plugin generator").Err(err).Send()
 		}
+		
+		err = gen.GenerateAllPlugins()
+		if err != nil {
+			log.Fatal("Error generating plugins").Err(err).Send()
+		}
+		log.Info("Plugin generation completed")
+		return
+	}
+
+	db, err := bbolt.Open(*dbPath, 0o644, nil)
+	if err != nil {
+		log.Fatal("Error opening database").Err(err).Send()
 	}
 
 	// Создаем базовый каталог для репозиториев
