@@ -142,6 +142,20 @@ func main() {
 		return
 	}
 
+	// Создаем директорию для базы данных, если её нет
+	dbDir := filepath.Dir(*dbPath)
+	if _, err := os.Stat(dbDir); os.IsNotExist(err) {
+		err = os.MkdirAll(dbDir, 0o755)
+		if err != nil {
+			log.Fatal("Error creating database directory").
+				Err(err).
+				Str("path", dbDir).
+				Str("hint", "Run as root or create directory manually: sudo mkdir -p "+dbDir+" && sudo chown alr-updater:alr-updater "+dbDir).
+				Send()
+		}
+		log.Info("Created database directory").Str("path", dbDir).Send()
+	}
+
 	db, err := bbolt.Open(*dbPath, 0o644, nil)
 	if err != nil {
 		log.Fatal("Error opening database").Err(err).Send()
@@ -155,8 +169,13 @@ func main() {
 	if _, err := os.Stat(cfg.ReposBaseDir); os.IsNotExist(err) {
 		err = os.MkdirAll(cfg.ReposBaseDir, 0o755)
 		if err != nil {
-			log.Fatal("Error creating repositories base directory").Err(err).Send()
+			log.Fatal("Error creating repositories base directory").
+				Err(err).
+				Str("path", cfg.ReposBaseDir).
+				Str("hint", "Run as root or create directory manually: sudo mkdir -p "+cfg.ReposBaseDir+" && sudo chown alr-updater:alr-updater "+cfg.ReposBaseDir).
+				Send()
 		}
+		log.Info("Created repositories base directory").Str("path", cfg.ReposBaseDir).Send()
 	} else if err != nil {
 		log.Fatal("Cannot stat configured repos base directory").Err(err).Send()
 	}
@@ -192,6 +211,19 @@ func main() {
 	// Проверяем, что есть хотя бы один репозиторий
 	if len(cfg.Repositories) == 0 {
 		log.Fatal("No repositories configured. At least one repository is required.").Send()
+	}
+
+	// Создаем директорию для плагинов, если её нет
+	if _, err := os.Stat(*pluginDir); os.IsNotExist(err) {
+		err = os.MkdirAll(*pluginDir, 0o755)
+		if err != nil {
+			log.Fatal("Error creating plugin directory").
+				Err(err).
+				Str("path", *pluginDir).
+				Str("hint", "Run as root or create directory manually: sudo mkdir -p "+*pluginDir+" && sudo chown root:alr-updater "+*pluginDir).
+				Send()
+		}
+		log.Info("Created plugin directory").Str("path", *pluginDir).Send()
 	}
 
 	starFiles, err := filepath.Glob(filepath.Join(*pluginDir, "*.star"))
