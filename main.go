@@ -77,6 +77,23 @@ func parseRepositoryFromPlugin(filePath string) (string, error) {
 	return "", scanner.Err()
 }
 
+// fixRepoPermissions рекурсивно устанавливает права 775 для директорий и 664 для файлов
+func fixRepoPermissions(path string) error {
+	return filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			// Устанавливаем права 2775 для директорий (setgid)
+			return os.Chmod(filePath, 0o2775)
+		} else {
+			// Устанавливаем права 664 для файлов
+			return os.Chmod(filePath, 0o664)
+		}
+	})
+}
+
 func main() {
 	configPath := pflag.StringP("config", "c", "/etc/alr-updater/config.toml", "Path to config file")
 	dbPath := pflag.StringP("database", "d", "/var/lib/alr-updater/db", "Path to database file")
@@ -145,12 +162,12 @@ func main() {
 	// Создаем директорию для базы данных, если её нет
 	dbDir := filepath.Dir(*dbPath)
 	if _, err := os.Stat(dbDir); os.IsNotExist(err) {
-		err = os.MkdirAll(dbDir, 0o755)
+		err = os.MkdirAll(dbDir, 0o2775)
 		if err != nil {
 			log.Fatal("Error creating database directory").
 				Err(err).
 				Str("path", dbDir).
-				Str("hint", "Run as root or create directory manually: sudo mkdir -p "+dbDir+" && sudo chown alr-updater:alr-updater "+dbDir).
+				Str("hint", "Run as root or create directory manually: sudo mkdir -p "+dbDir+" && sudo chown root:wheel "+dbDir+" && sudo chmod 2775 "+dbDir).
 				Send()
 		}
 		log.Info("Created database directory").Str("path", dbDir).Send()
@@ -167,12 +184,12 @@ func main() {
 	}
 
 	if _, err := os.Stat(cfg.ReposBaseDir); os.IsNotExist(err) {
-		err = os.MkdirAll(cfg.ReposBaseDir, 0o755)
+		err = os.MkdirAll(cfg.ReposBaseDir, 0o2775)
 		if err != nil {
 			log.Fatal("Error creating repositories base directory").
 				Err(err).
 				Str("path", cfg.ReposBaseDir).
-				Str("hint", "Run as root or create directory manually: sudo mkdir -p "+cfg.ReposBaseDir+" && sudo chown alr-updater:alr-updater "+cfg.ReposBaseDir).
+				Str("hint", "Run as root or create directory manually: sudo mkdir -p "+cfg.ReposBaseDir+" && sudo chown root:wheel "+cfg.ReposBaseDir+" && sudo chmod 2775 "+cfg.ReposBaseDir).
 				Send()
 		}
 		log.Info("Created repositories base directory").Str("path", cfg.ReposBaseDir).Send()
@@ -187,7 +204,7 @@ func main() {
 		if _, err := os.Stat(repoDir); os.IsNotExist(err) {
 			log.Info("Cloning repository").Str("name", repoName).Str("url", repoConfig.RepoURL).Send()
 
-			err = os.MkdirAll(repoDir, 0o755)
+			err = os.MkdirAll(repoDir, 0o2775)
 			if err != nil {
 				log.Fatal("Error creating repository directory").Str("repo", repoName).Err(err).Send()
 			}
@@ -198,6 +215,11 @@ func main() {
 			})
 			if err != nil {
 				log.Fatal("Error cloning repository").Str("repo", repoName).Err(err).Send()
+			}
+
+			// Исправляем права доступа после клонирования
+			if err := fixRepoPermissions(repoDir); err != nil {
+				log.Error("Error fixing repository permissions").Str("repo", repoName).Err(err).Send()
 			}
 
 			log.Info("Repository cloned successfully").Str("name", repoName).Send()
@@ -215,12 +237,12 @@ func main() {
 
 	// Создаем директорию для плагинов, если её нет
 	if _, err := os.Stat(*pluginDir); os.IsNotExist(err) {
-		err = os.MkdirAll(*pluginDir, 0o755)
+		err = os.MkdirAll(*pluginDir, 0o2775)
 		if err != nil {
 			log.Fatal("Error creating plugin directory").
 				Err(err).
 				Str("path", *pluginDir).
-				Str("hint", "Run as root or create directory manually: sudo mkdir -p "+*pluginDir+" && sudo chown root:alr-updater "+*pluginDir).
+				Str("hint", "Run as root or create directory manually: sudo mkdir -p "+*pluginDir+" && sudo chown root:wheel "+*pluginDir+" && sudo chmod 2775 "+*pluginDir).
 				Send()
 		}
 		log.Info("Created plugin directory").Str("path", *pluginDir).Send()

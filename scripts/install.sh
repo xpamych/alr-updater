@@ -20,19 +20,21 @@ fi
 BINARY_PATH="/usr/local/bin/alr-updater"
 SERVICE_NAME="alr-updater"
 SERVICE_USER="alr-updater"
-SERVICE_GROUP="alr-updater"
+SERVICE_GROUP="wheel"
 CONFIG_DIR="/etc/alr-updater"
 DATA_DIR="/var/lib/alr-updater"
 CACHE_DIR="/var/cache/alr-updater"
 PLUGIN_DIR="${CONFIG_DIR}/plugins"
 
-# Создание пользователя и группы
-echo -e "${YELLOW}Creating user and group...${NC}"
+# Создание пользователя и добавление в группу wheel
+echo -e "${YELLOW}Creating user and adding to wheel group...${NC}"
 if ! id -u ${SERVICE_USER} >/dev/null 2>&1; then
-    useradd -r -s /bin/false -d /var/lib/${SERVICE_USER} ${SERVICE_USER}
-    echo -e "${GREEN}User ${SERVICE_USER} created${NC}"
+    useradd -r -s /bin/false -d /var/lib/${SERVICE_USER} -G wheel ${SERVICE_USER}
+    echo -e "${GREEN}User ${SERVICE_USER} created and added to wheel group${NC}"
 else
-    echo -e "${GREEN}User ${SERVICE_USER} already exists${NC}"
+    # Добавляем существующего пользователя в группу wheel
+    usermod -a -G wheel ${SERVICE_USER}
+    echo -e "${GREEN}User ${SERVICE_USER} already exists, added to wheel group${NC}"
 fi
 
 # Создание директорий
@@ -42,15 +44,15 @@ mkdir -p ${DATA_DIR}
 mkdir -p ${CACHE_DIR}
 mkdir -p ${PLUGIN_DIR}
 
-# Установка прав доступа
-echo -e "${YELLOW}Setting permissions...${NC}"
-chown -R ${SERVICE_USER}:${SERVICE_GROUP} ${DATA_DIR}
-chown -R ${SERVICE_USER}:${SERVICE_GROUP} ${CACHE_DIR}
+# Установка прав доступа с setgid битом
+echo -e "${YELLOW}Setting permissions with setgid...${NC}"
+chown -R root:${SERVICE_GROUP} ${DATA_DIR}
+chown -R root:${SERVICE_GROUP} ${CACHE_DIR}
 chown -R root:${SERVICE_GROUP} ${CONFIG_DIR}
-chmod 755 ${CONFIG_DIR}
-chmod 755 ${PLUGIN_DIR}
-chmod 755 ${DATA_DIR}
-chmod 755 ${CACHE_DIR}
+chmod 2775 ${CONFIG_DIR}
+chmod 2775 ${PLUGIN_DIR}
+chmod 2775 ${DATA_DIR}
+chmod 2775 ${CACHE_DIR}
 
 # Копирование бинарника
 if [ -f "./alr-updater" ]; then
