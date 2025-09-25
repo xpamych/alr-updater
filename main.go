@@ -21,6 +21,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -37,11 +38,14 @@ import (
 	"gitea.plemya-x.ru/Plemya-x/ALR-updater/internal/builtins"
 	"gitea.plemya-x.ru/Plemya-x/ALR-updater/internal/config"
 	"gitea.plemya-x.ru/Plemya-x/ALR-updater/internal/generator"
+	filelogger "gitea.plemya-x.ru/Plemya-x/ALR-updater/internal/logger"
 	"go.etcd.io/bbolt"
 	"go.starlark.net/starlark"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/term"
 )
+
+var fileWriter *filelogger.RotatingFileWriter
 
 func init() {
 	log.Logger = logger.NewPretty(os.Stderr)
@@ -141,6 +145,37 @@ func main() {
 			log.Fatal("Error decoding config file").Err(err).Send()
 		}
 		fl.Close()
+	}
+
+	// Настройка логирования в файл
+	if cfg.Logging.EnableFile {
+		logFile := cfg.Logging.LogFile
+		if logFile == "" {
+			logFile = "/var/log/alr-updater.log"
+		}
+
+		maxSize := cfg.Logging.MaxSize
+		if maxSize == 0 {
+			maxSize = 100 * 1024 * 1024 // 100 MB по умолчанию
+		}
+
+		var err error
+		fileWriter, err = filelogger.NewRotatingFileWriter(logFile, maxSize)
+		if err != nil {
+			log.Error("Failed to create file logger, continuing with stderr only").Err(err).Send()
+		} else {
+			// Создаем MultiWriter для вывода в stderr и файл одновременно
+			multiWriter := filelogger.NewMultiWriter(os.Stderr, fileWriter)
+			log.Logger = logger.NewPretty(multiWriter)
+			log.Info("File logging enabled").Str("file", logFile).Int64("maxSize", maxSize).Send()
+
+			// Закрываем файл при завершении
+			defer func() {
+				if fileWriter != nil {
+					fileWriter.Close()
+				}
+			}()
+		}
 	}
 
 	// Обработка генерации плагинов

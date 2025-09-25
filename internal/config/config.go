@@ -22,6 +22,7 @@ type Config struct {
 	ReposBaseDir string            `toml:"reposBaseDir" env:"REPOS_BASE_DIR"`
 	Repositories map[string]GitRepo `toml:"repositories"`
 	Webhook      Webhook           `toml:"webhook" envPrefix:"WEBHOOK_"`
+	Logging      Logging           `toml:"logging" envPrefix:"LOGGING_"`
 }
 
 type GitRepo struct {
@@ -42,4 +43,10 @@ type Commit struct {
 
 type Webhook struct {
 	PasswordHash string `toml:"pwd_hash" env:"PASSWORD_HASH"`
+}
+
+type Logging struct {
+	LogFile     string `toml:"log_file" env:"LOG_FILE"`
+	MaxSize     int64  `toml:"max_size" env:"MAX_SIZE"`
+	EnableFile  bool   `toml:"enable_file" env:"ENABLE_FILE"`
 }

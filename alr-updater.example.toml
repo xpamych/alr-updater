@@ -35,3 +35,12 @@ reposBaseDir = "/var/cache/alr-updater"
 [webhook]
   # Хэш пароля для webhook. Сгенерируйте его, используя `alr-updater -g`.
   pwd_hash = "CHANGE ME"
+
+[logging]
+  # Включить логирование в файл
+  enable_file = false
+  # Путь к файлу логов (по умолчанию /var/log/alr-updater.log)
+  log_file = "/var/log/alr-updater.log"
+  # Максимальный размер файла логов в байтах (по умолчанию 100MB)
+  # При достижении этого размера файл будет ротирован
+  max_size = 104857600
