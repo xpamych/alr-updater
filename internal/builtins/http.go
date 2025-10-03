@@ -25,6 +25,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"go.elara.ws/logger/log"
 	"gitea.plemya-x.ru/Plemya-x/ALR-updater/internal/config"
@@ -86,8 +87,9 @@ func makeRequestWithConfig(name, method string, args starlark.Tuple, kwargs []st
 		redirect = true
 		headers  = &starlarkHeaders{}
 		body     = newBodyReader()
+		timeout  int64 = 30 // Таймаут по умолчанию 30 секунд
 	)
-	err := starlark.UnpackArgs(name, args, kwargs, "url", &url, "redirect??", &redirect, "headers??", headers, "body??", body)
+	err := starlark.UnpackArgs(name, args, kwargs, "url", &url, "redirect??", &redirect, "headers??", headers, "body??", body, "timeout??", &timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -107,12 +109,12 @@ func makeRequestWithConfig(name, method string, args starlark.Tuple, kwargs []st
 		req.Header.Set("Authorization", "token "+cfg.GitHub.Token)
 	}
 
-	client := http.DefaultClient
+	client := &http.Client{
+		Timeout: time.Duration(timeout) * time.Second,
+	}
 	if !redirect {
-		client = &http.Client{
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
+		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
 		}
 	}
 
