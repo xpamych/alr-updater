@@ -21,7 +21,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -244,12 +243,22 @@ func main() {
 				log.Fatal("Error creating repository directory").Str("repo", repoName).Err(err).Send()
 			}
 
-			_, err := git.PlainClone(repoDir, false, &git.CloneOptions{
+			repo, err := git.PlainClone(repoDir, false, &git.CloneOptions{
 				URL:      repoConfig.RepoURL,
 				Progress: os.Stderr,
 			})
 			if err != nil {
 				log.Fatal("Error cloning repository").Str("repo", repoName).Err(err).Send()
+			}
+
+			// Настраиваем Git для корректной работы с правами доступа
+			gitConfig, err := repo.Config()
+			if err == nil {
+				gitConfig.Raw.Section("core").SetOption("sharedRepository", "group")
+				err = repo.SetConfig(gitConfig)
+				if err != nil {
+					log.Warn("Failed to set Git sharedRepository config").Str("repo", repoName).Err(err).Send()
+				}
 			}
 
 			// Исправляем права доступа после клонирования
@@ -262,6 +271,19 @@ func main() {
 			log.Fatal("Cannot stat repository directory").Str("repo", repoName).Err(err).Send()
 		} else {
 			log.Info("Repository already exists").Str("name", repoName).Send()
+
+			// Настраиваем Git конфигурацию для существующих репозиториев
+			repo, err := git.PlainOpen(repoDir)
+			if err == nil {
+				gitConfig, err := repo.Config()
+				if err == nil {
+					gitConfig.Raw.Section("core").SetOption("sharedRepository", "group")
+					err = repo.SetConfig(gitConfig)
+					if err != nil {
+						log.Warn("Failed to set Git sharedRepository config").Str("repo", repoName).Err(err).Send()
+					}
+				}
+			}
 		}
 	}
 

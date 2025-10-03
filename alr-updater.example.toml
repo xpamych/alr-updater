@@ -44,3 +44,11 @@ reposBaseDir = "/var/cache/alr-updater"
   # Максимальный размер файла логов в байтах (по умолчанию 100MB)
   # При достижении этого размера файл будет ротирован
   max_size = 104857600
+
+[github]
+  # GitHub Personal Access Token для увеличения лимита API запросов
+  # Без токена: 60 запросов/час
+  # С токеном: 5000 запросов/час
+  # Создать токен: https://github.com/settings/tokens
+  # Требуемые права: public_repo (или repo для приватных репозиториев)
+  token = "CHANGE ME"

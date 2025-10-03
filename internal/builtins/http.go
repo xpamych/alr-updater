@@ -44,30 +44,88 @@ var (
 	ErrIncorrectPassword = errors.New("incorrect password")
 )
 
-var httpModule = &starlarkstruct.Module{
-	Name: "http",
-	Members: starlark.StringDict{
-		"get":  starlark.NewBuiltin("http.get", httpGet),
-		"post": starlark.NewBuiltin("http.post", httpPost),
-		"put":  starlark.NewBuiltin("http.put", httpPut),
-		"head": starlark.NewBuiltin("http.head", httpHead),
-	},
+func newHTTPModule(cfg *config.Config) *starlarkstruct.Module {
+	return &starlarkstruct.Module{
+		Name: "http",
+		Members: starlark.StringDict{
+			"get":  httpGetWithConfig(cfg),
+			"post": httpPostWithConfig(cfg),
+			"put":  httpPutWithConfig(cfg),
+			"head": httpHeadWithConfig(cfg),
+		},
+	}
 }
 
-func httpGet(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	return makeRequest("http.get", http.MethodGet, args, kwargs, thread)
+func httpGetWithConfig(cfg *config.Config) *starlark.Builtin {
+	return starlark.NewBuiltin("http.get", func(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		return makeRequestWithConfig("http.get", http.MethodGet, args, kwargs, thread, cfg)
+	})
 }
 
-func httpPost(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	return makeRequest("http.post", http.MethodPost, args, kwargs, thread)
+func httpPostWithConfig(cfg *config.Config) *starlark.Builtin {
+	return starlark.NewBuiltin("http.post", func(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		return makeRequestWithConfig("http.post", http.MethodPost, args, kwargs, thread, cfg)
+	})
 }
 
-func httpPut(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	return makeRequest("http.put", http.MethodPut, args, kwargs, thread)
+func httpPutWithConfig(cfg *config.Config) *starlark.Builtin {
+	return starlark.NewBuiltin("http.put", func(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		return makeRequestWithConfig("http.put", http.MethodPut, args, kwargs, thread, cfg)
+	})
 }
 
-func httpHead(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	return makeRequest("http.head", http.MethodHead, args, kwargs, thread)
+func httpHeadWithConfig(cfg *config.Config) *starlark.Builtin {
+	return starlark.NewBuiltin("http.head", func(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		return makeRequestWithConfig("http.head", http.MethodHead, args, kwargs, thread, cfg)
+	})
+}
+
+func makeRequestWithConfig(name, method string, args starlark.Tuple, kwargs []starlark.Tuple, thread *starlark.Thread, cfg *config.Config) (starlark.Value, error) {
+	var (
+		url      string
+		redirect = true
+		headers  = &starlarkHeaders{}
+		body     = newBodyReader()
+	)
+	err := starlark.UnpackArgs(name, args, kwargs, "url", &url, "redirect??", &redirect, "headers??", headers, "body??", body)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(method, url, body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Устанавливаем заголовки из аргументов
+	if headers.Header != nil {
+		req.Header = headers.Header
+	}
+
+	// Добавляем GitHub токен для запросов к api.github.com
+	if cfg.GitHub.Token != "" && strings.Contains(url, "api.github.com") {
+		req.Header.Set("Authorization", "token "+cfg.GitHub.Token)
+	}
+
+	client := http.DefaultClient
+	if !redirect {
+		client = &http.Client{
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+	}
+
+	log.Debug("Making HTTP request").Str("url", url).Str("method", req.Method).Bool("redirect", redirect).Stringer("pos", thread.CallFrame(1).Pos).Send()
+
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Debug("Got HTTP response").Str("host", res.Request.URL.Host).Int("code", res.StatusCode).Stringer("pos", thread.CallFrame(1).Pos).Send()
+
+	return starlarkResponse(res), nil
 }
 
 type starlarkBodyReader struct {

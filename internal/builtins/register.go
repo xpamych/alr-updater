@@ -38,7 +38,7 @@ type Options struct {
 func Register(sd starlark.StringDict, opts *Options) {
 	sd["run_every"] = runEveryModule
 	sd["sleep"] = starlark.NewBuiltin("sleep", sleep)
-	sd["http"] = httpModule
+	sd["http"] = newHTTPModule(opts.Config)
 	sd["regex"] = regexModule
 	sd["store"] = storeModule(opts.DB, opts.Name)
 	sd["updater"] = updaterModule(opts.Config)

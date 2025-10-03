@@ -25,6 +25,7 @@ CONFIG_DIR="/etc/alr-updater"
 DATA_DIR="/var/lib/alr-updater"
 CACHE_DIR="/var/cache/alr-updater"
 PLUGIN_DIR="${CONFIG_DIR}/plugins"
+LOG_FILE="/var/log/alr-updater.log"
 
 # Создание пользователя и добавление в группу wheel
 echo -e "${YELLOW}Creating user and adding to wheel group...${NC}"
@@ -43,6 +44,12 @@ mkdir -p ${CONFIG_DIR}
 mkdir -p ${DATA_DIR}
 mkdir -p ${CACHE_DIR}
 mkdir -p ${PLUGIN_DIR}
+
+# Создание файла лога
+echo -e "${YELLOW}Creating log file...${NC}"
+touch ${LOG_FILE}
+chown ${SERVICE_USER}:${SERVICE_GROUP} ${LOG_FILE}
+chmod 664 ${LOG_FILE}
 
 # Установка прав доступа с setgid битом
 echo -e "${YELLOW}Setting permissions with setgid...${NC}"
@@ -99,7 +106,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=${DATA_DIR} ${CACHE_DIR}
+ReadWritePaths=${DATA_DIR} ${CACHE_DIR} ${LOG_FILE}
 ReadOnlyPaths=${CONFIG_DIR}
 
 [Install]

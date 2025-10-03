@@ -87,8 +87,31 @@ func updaterPull(cfg *config.Config) *starlark.Builtin {
 			return nil, err
 		}
 
+		// Исправляем права доступа после git pull
+		err = fixRepoPermissions(repoDir)
+		if err != nil {
+			log.Warn("Failed to fix repository permissions after pull").Str("repo", repoName).Err(err).Send()
+		}
+
 		_ = repoConfig // Избегаем неиспользованной переменной
 		return starlark.None, nil
+	})
+}
+
+// fixRepoPermissions рекурсивно устанавливает права 775 для директорий и 664 для файлов
+func fixRepoPermissions(path string) error {
+	return filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			// Устанавливаем права 2775 для директорий (setgid)
+			return os.Chmod(filePath, 0o2775)
+		} else {
+			// Устанавливаем права 664 для файлов
+			return os.Chmod(filePath, 0o664)
+		}
 	})
 }
 
