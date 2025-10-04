@@ -180,8 +180,9 @@ func runScheduled(thread *starlark.Thread, fn *starlark.Function, duration strin
 
 	// Запускаем функцию немедленно при первой регистрации
 	go func() {
+		newThread := &starlark.Thread{Name: thread.Name}
 		log.Info("Running plugin function immediately on startup").Str("plugin", thread.Name).Str("function", fn.Name()).Send()
-		_, err := starlark.Call(thread, fn, nil, nil)
+		_, err := starlark.Call(newThread, fn, nil, nil)
 		if err != nil {
 			log.Warn("Error while executing initial plugin function").Str("plugin", thread.Name).Str("function", fn.Name()).Err(err).Send()
 		}
@@ -189,10 +190,11 @@ func runScheduled(thread *starlark.Thread, fn *starlark.Function, duration strin
 
 	go func() {
 		for range t.C {
-			log.Debug("Calling scheduled function").Str("name", fn.Name()).Stringer("pos", fn.Position()).Send()
-			_, err := starlark.Call(thread, fn, nil, nil)
+			newThread := &starlark.Thread{Name: thread.Name}
+			log.Info("Calling scheduled function").Str("plugin", thread.Name).Str("function", fn.Name()).Send()
+			_, err := starlark.Call(newThread, fn, nil, nil)
 			if err != nil {
-				log.Warn("Error while executing scheduled function").Str("name", fn.Name()).Stringer("pos", fn.Position()).Err(err).Send()
+				log.Warn("Error while executing scheduled function").Str("plugin", thread.Name).Str("function", fn.Name()).Err(err).Send()
 			}
 		}
 	}()
