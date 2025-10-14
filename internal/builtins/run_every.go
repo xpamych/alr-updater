@@ -180,6 +180,11 @@ func runScheduled(thread *starlark.Thread, fn *starlark.Function, duration strin
 
 	// Запускаем функцию немедленно при первой регистрации
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error("Panic in initial plugin function execution").Str("plugin", thread.Name).Str("function", fn.Name()).Any("panic", r).Send()
+			}
+		}()
 		newThread := &starlark.Thread{Name: thread.Name}
 		log.Info("Running plugin function immediately on startup").Str("plugin", thread.Name).Str("function", fn.Name()).Send()
 		_, err := starlark.Call(newThread, fn, nil, nil)
@@ -189,13 +194,26 @@ func runScheduled(thread *starlark.Thread, fn *starlark.Function, duration strin
 	}()
 
 	go func() {
-		for range t.C {
-			newThread := &starlark.Thread{Name: thread.Name}
-			log.Info("Calling scheduled function").Str("plugin", thread.Name).Str("function", fn.Name()).Send()
-			_, err := starlark.Call(newThread, fn, nil, nil)
-			if err != nil {
-				log.Warn("Error while executing scheduled function").Str("plugin", thread.Name).Str("function", fn.Name()).Err(err).Send()
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error("Panic in scheduled function goroutine - scheduler stopped!").Str("plugin", thread.Name).Str("function", fn.Name()).Any("panic", r).Send()
 			}
+		}()
+		for range t.C {
+			// Защита от паник внутри каждого вызова
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Error("Panic while executing scheduled function").Str("plugin", thread.Name).Str("function", fn.Name()).Any("panic", r).Send()
+					}
+				}()
+				newThread := &starlark.Thread{Name: thread.Name}
+				log.Info("Calling scheduled function").Str("plugin", thread.Name).Str("function", fn.Name()).Send()
+				_, err := starlark.Call(newThread, fn, nil, nil)
+				if err != nil {
+					log.Warn("Error while executing scheduled function").Str("plugin", thread.Name).Str("function", fn.Name()).Err(err).Send()
+				}
+			}()
 		}
 	}()
 

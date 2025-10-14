@@ -105,6 +105,12 @@ func fixRepoPermissions(path string) error {
 			return err
 		}
 
+		// Пропускаем директорию .git и её содержимое
+		// Git управляет правами самостоятельно, не нужно их трогать
+		if info.IsDir() && info.Name() == ".git" {
+			return filepath.SkipDir
+		}
+
 		if info.IsDir() {
 			// Устанавливаем права 2775 для директорий (setgid)
 			return os.Chmod(filePath, 0o2775)
