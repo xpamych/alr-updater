@@ -19,43 +19,115 @@
 package permissions
 
 import (
+	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
+	"strconv"
 )
 
-// FixFilePermissions устанавливает права 664 для файла
+// FixFilePermissions устанавливает права 664 для файла и владельца alr-updater:wheel
 // Используется для всех файлов, создаваемых программой, чтобы они были доступны
-// для чтения и записи группе (wheel), даже если файл создан от пользователя alr-updater
+// для чтения и записи группе (wheel), даже если файл создан от другого пользователя
 func FixFilePermissions(filePath string) error {
+	// Получаем UID и GID для alr-updater:wheel
+	uid, gid, err := getAlrUpdaterIDs()
+	if err != nil {
+		// Если не можем получить ID (например, в dev-окружении), просто меняем права
+		return os.Chmod(filePath, 0o664)
+	}
+
+	// Изменяем владельца
+	if err := os.Chown(filePath, uid, gid); err != nil {
+		// Если не удалось изменить владельца (недостаточно прав), игнорируем
+		// но устанавливаем права
+		_ = os.Chmod(filePath, 0o664)
+		return err
+	}
+
 	return os.Chmod(filePath, 0o664)
 }
 
-// FixDirectoryPermissions устанавливает права 2775 для директории (с setgid битом)
+// FixDirectoryPermissions устанавливает права 2775 для директории (с setgid битом) и владельца alr-updater:wheel
 // Бит setgid (2000) гарантирует, что все новые файлы в директории будут принадлежать группе директории
 func FixDirectoryPermissions(dirPath string) error {
+	// Получаем UID и GID для alr-updater:wheel
+	uid, gid, err := getAlrUpdaterIDs()
+	if err != nil {
+		// Если не можем получить ID (например, в dev-окружении), просто меняем права
+		return os.Chmod(dirPath, 0o2775)
+	}
+
+	// Изменяем владельца
+	if err := os.Chown(dirPath, uid, gid); err != nil {
+		// Если не удалось изменить владельца (недостаточно прав), игнорируем
+		// но устанавливаем права
+		_ = os.Chmod(dirPath, 0o2775)
+		return err
+	}
+
 	return os.Chmod(dirPath, 0o2775)
 }
 
+// getAlrUpdaterIDs возвращает UID пользователя alr-updater и GID группы wheel
+func getAlrUpdaterIDs() (int, int, error) {
+	// Получаем пользователя alr-updater
+	u, err := user.Lookup("alr-updater")
+	if err != nil {
+		return -1, -1, fmt.Errorf("failed to lookup user alr-updater: %w", err)
+	}
+
+	uid, err := strconv.Atoi(u.Uid)
+	if err != nil {
+		return -1, -1, fmt.Errorf("failed to parse UID: %w", err)
+	}
+
+	// Получаем группу wheel
+	g, err := user.LookupGroup("wheel")
+	if err != nil {
+		return -1, -1, fmt.Errorf("failed to lookup group wheel: %w", err)
+	}
+
+	gid, err := strconv.Atoi(g.Gid)
+	if err != nil {
+		return -1, -1, fmt.Errorf("failed to parse GID: %w", err)
+	}
+
+	return uid, gid, nil
+}
+
 // FixRepoPermissions рекурсивно устанавливает права 775 для директорий и 664 для файлов
-// Пропускает директорию .git, так как Git управляет правами самостоятельно
+// Включая директорию .git, чтобы обеспечить доступ к объектам Git для группы wheel
+// Также изменяет владельца на alr-updater:wheel
 func FixRepoPermissions(path string) error {
+	// Получаем UID и GID для alr-updater:wheel
+	uid, gid, err := getAlrUpdaterIDs()
+	if err != nil {
+		return fmt.Errorf("failed to get alr-updater IDs: %w", err)
+	}
+
 	return filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 
-		// Пропускаем директорию .git и её содержимое
-		// Git управляет правами самостоятельно, не нужно их трогать
-		if info.IsDir() && info.Name() == ".git" {
-			return filepath.SkipDir
+		// Изменяем владельца на alr-updater:wheel
+		if err := os.Chown(filePath, uid, gid); err != nil {
+			return fmt.Errorf("failed to chown %s: %w", filePath, err)
 		}
 
 		if info.IsDir() {
 			// Устанавливаем права 2775 для директорий (setgid)
-			return os.Chmod(filePath, 0o2775)
+			if err := os.Chmod(filePath, 0o2775); err != nil {
+				return fmt.Errorf("failed to chmod directory %s: %w", filePath, err)
+			}
 		} else {
 			// Устанавливаем права 664 для файлов
-			return os.Chmod(filePath, 0o664)
+			if err := os.Chmod(filePath, 0o664); err != nil {
+				return fmt.Errorf("failed to chmod file %s: %w", filePath, err)
+			}
 		}
+
+		return nil
 	})
 }
