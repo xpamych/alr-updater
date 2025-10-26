@@ -9,6 +9,8 @@ import (
 	"text/template"
 
 	"gitea.plemya-x.ru/Plemya-x/ALR-updater/internal/config"
+	"gitea.plemya-x.ru/Plemya-x/ALR-updater/internal/permissions"
+	"go.elara.ws/logger/log"
 )
 
 // PluginTemplate представляет шаблон плагина
@@ -381,6 +383,11 @@ func (pg *PluginGenerator) GeneratePlugin(detected DetectedPackage, repoName str
 	err = pg.template.Execute(file, data)
 	if err != nil {
 		return fmt.Errorf("failed to execute template: %w", err)
+	}
+
+	// Восстанавливаем права на файл плагина
+	if err := permissions.FixFilePermissions(pluginFile); err != nil {
+		log.Warn("Failed to fix plugin file permissions").Str("path", pluginFile).Err(err).Send()
 	}
 
 	fmt.Printf("✅ Generated plugin: %s\n", pluginFile)

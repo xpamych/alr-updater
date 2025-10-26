@@ -25,6 +25,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"gitea.plemya-x.ru/Plemya-x/ALR-updater/internal/permissions"
 )
 
 type RotatingFileWriter struct {
@@ -37,8 +39,14 @@ type RotatingFileWriter struct {
 
 func NewRotatingFileWriter(filename string, maxSize int64) (*RotatingFileWriter, error) {
 	dir := filepath.Dir(filename)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o2775); err != nil {
 		return nil, fmt.Errorf("failed to create log directory: %w", err)
+	}
+
+	// Восстанавливаем права на директорию логов
+	if err := permissions.FixDirectoryPermissions(dir); err != nil {
+		// Не критичная ошибка, продолжаем работу
+		fmt.Fprintf(os.Stderr, "Warning: failed to fix log directory permissions: %v\n", err)
 	}
 
 	rfw := &RotatingFileWriter{
@@ -54,9 +62,15 @@ func NewRotatingFileWriter(filename string, maxSize int64) (*RotatingFileWriter,
 }
 
 func (rfw *RotatingFileWriter) openFile() error {
-	file, err := os.OpenFile(rfw.filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	file, err := os.OpenFile(rfw.filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o664)
 	if err != nil {
 		return fmt.Errorf("failed to open log file: %w", err)
+	}
+
+	// Восстанавливаем права на файл лога
+	if err := permissions.FixFilePermissions(rfw.filename); err != nil {
+		// Не критичная ошибка, продолжаем работу
+		fmt.Fprintf(os.Stderr, "Warning: failed to fix log file permissions: %v\n", err)
 	}
 
 	info, err := file.Stat()

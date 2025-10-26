@@ -38,6 +38,7 @@ import (
 	"gitea.plemya-x.ru/Plemya-x/ALR-updater/internal/config"
 	"gitea.plemya-x.ru/Plemya-x/ALR-updater/internal/generator"
 	filelogger "gitea.plemya-x.ru/Plemya-x/ALR-updater/internal/logger"
+	"gitea.plemya-x.ru/Plemya-x/ALR-updater/internal/permissions"
 	"go.etcd.io/bbolt"
 	"go.starlark.net/starlark"
 	"golang.org/x/crypto/bcrypt"
@@ -80,22 +81,6 @@ func parseRepositoryFromPlugin(filePath string) (string, error) {
 	return "", scanner.Err()
 }
 
-// fixRepoPermissions рекурсивно устанавливает права 775 для директорий и 664 для файлов
-func fixRepoPermissions(path string) error {
-	return filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if info.IsDir() {
-			// Устанавливаем права 2775 для директорий (setgid)
-			return os.Chmod(filePath, 0o2775)
-		} else {
-			// Устанавливаем права 664 для файлов
-			return os.Chmod(filePath, 0o664)
-		}
-	})
-}
 
 func main() {
 	configPath := pflag.StringP("config", "c", "/etc/alr-updater/config.toml", "Path to config file")
@@ -262,7 +247,7 @@ func main() {
 			}
 
 			// Исправляем права доступа после клонирования
-			if err := fixRepoPermissions(repoDir); err != nil {
+			if err := permissions.FixRepoPermissions(repoDir); err != nil {
 				log.Error("Error fixing repository permissions").Str("repo", repoName).Err(err).Send()
 			}
 

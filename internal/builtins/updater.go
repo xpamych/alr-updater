@@ -33,6 +33,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"go.elara.ws/logger/log"
 	"gitea.plemya-x.ru/Plemya-x/ALR-updater/internal/config"
+	"gitea.plemya-x.ru/Plemya-x/ALR-updater/internal/permissions"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 )
@@ -88,7 +89,7 @@ func updaterPull(cfg *config.Config) *starlark.Builtin {
 		}
 
 		// Исправляем права доступа после git pull
-		err = fixRepoPermissions(repoDir)
+		err = permissions.FixRepoPermissions(repoDir)
 		if err != nil {
 			log.Warn("Failed to fix repository permissions after pull").Str("repo", repoName).Err(err).Send()
 		}
@@ -98,28 +99,6 @@ func updaterPull(cfg *config.Config) *starlark.Builtin {
 	})
 }
 
-// fixRepoPermissions рекурсивно устанавливает права 775 для директорий и 664 для файлов
-func fixRepoPermissions(path string) error {
-	return filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		// Пропускаем директорию .git и её содержимое
-		// Git управляет правами самостоятельно, не нужно их трогать
-		if info.IsDir() && info.Name() == ".git" {
-			return filepath.SkipDir
-		}
-
-		if info.IsDir() {
-			// Устанавливаем права 2775 для директорий (setgid)
-			return os.Chmod(filePath, 0o2775)
-		} else {
-			// Устанавливаем права 664 для файлов
-			return os.Chmod(filePath, 0o664)
-		}
-	})
-}
 
 func updaterPushChanges(cfg *config.Config) *starlark.Builtin {
 	return starlark.NewBuiltin("updater.push_changes", func(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
@@ -267,6 +246,11 @@ func writePackageFile(cfg *config.Config) *starlark.Builtin {
 			return nil, err
 		}
 
+		// Восстанавливаем права на файл
+		if err := permissions.FixFilePermissions(path); err != nil {
+			log.Warn("Failed to fix file permissions").Str("path", path).Err(err).Send()
+		}
+
 		log.Debug("Wrote package file").Str("repo", repoName).Str("package", pkg).Str("filename", filename).Stringer("pos", thread.CallFrame(1).Pos).Send()
 		return starlark.None, nil
 	})
@@ -388,13 +372,18 @@ func updateChecksums(cfg *config.Config) *starlark.Builtin {
 			return nil, err
 		}
 
+		// Восстанавливаем права на файл
+		if err := permissions.FixFilePermissions(path); err != nil {
+			log.Warn("Failed to fix file permissions").Str("path", path).Err(err).Send()
+		}
+
 		log.Debug("Updated package file with checksums").
 			Str("repo", repoName).
 			Str("package", pkg).
 			Str("filename", filename).
 			Int("checksums_count", len(checksumStrings)).
 			Stringer("pos", thread.CallFrame(1).Pos).Send()
-		
+
 		return starlark.None, nil
 	})
 }
