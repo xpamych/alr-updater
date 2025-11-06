@@ -103,7 +103,26 @@ func FixRepoPermissions(path string) error {
 	// Получаем UID и GID для alr-updater:wheel
 	uid, gid, err := getAlrUpdaterIDs()
 	if err != nil {
-		return fmt.Errorf("failed to get alr-updater IDs: %w", err)
+		// Если не можем получить ID (например, в dev-окружении), только устанавливаем права
+		return filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			if info.IsDir() {
+				// Устанавливаем права 2775 для директорий (setgid)
+				if err := os.Chmod(filePath, 0o2775); err != nil {
+					return fmt.Errorf("failed to chmod directory %s: %w", filePath, err)
+				}
+			} else {
+				// Устанавливаем права 664 для файлов
+				if err := os.Chmod(filePath, 0o664); err != nil {
+					return fmt.Errorf("failed to chmod file %s: %w", filePath, err)
+				}
+			}
+
+			return nil
+		})
 	}
 
 	return filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
@@ -113,7 +132,14 @@ func FixRepoPermissions(path string) error {
 
 		// Изменяем владельца на alr-updater:wheel
 		if err := os.Chown(filePath, uid, gid); err != nil {
-			return fmt.Errorf("failed to chown %s: %w", filePath, err)
+			// Если не удалось изменить владельца (недостаточно прав), всё равно устанавливаем права
+			if info.IsDir() {
+				_ = os.Chmod(filePath, 0o2775)
+				return fmt.Errorf("failed to chown directory %s: %w", filePath, err)
+			} else {
+				_ = os.Chmod(filePath, 0o664)
+				return fmt.Errorf("failed to chown file %s: %w", filePath, err)
+			}
 		}
 
 		if info.IsDir() {

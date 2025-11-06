@@ -52,9 +52,23 @@ func updaterModule(cfg *config.Config) *starlarkstruct.Module {
 	}
 }
 
-// repoMtx makes sure two starlark threads can
-// never access the repo at the same time
-var repoMtx = &sync.Mutex{}
+// repoMtxMap provides a mutex for each repository to avoid blocking
+// operations on one repo from affecting another
+var repoMtxMap = make(map[string]*sync.Mutex)
+var repoMtxMapMtx = &sync.Mutex{} // protects the map itself
+
+func getRepoMutex(repoName string) *sync.Mutex {
+	repoMtxMapMtx.Lock()
+	defer repoMtxMapMtx.Unlock()
+	
+	mtx, exists := repoMtxMap[repoName]
+	if !exists {
+		mtx = &sync.Mutex{}
+		repoMtxMap[repoName] = mtx
+	}
+	
+	return mtx
+}
 
 func updaterPull(cfg *config.Config) *starlark.Builtin {
 	return starlark.NewBuiltin("updater.pull", func(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
@@ -69,8 +83,9 @@ func updaterPull(cfg *config.Config) *starlark.Builtin {
 			return nil, fmt.Errorf("repository '%s' not found in configuration", repoName)
 		}
 
-		repoMtx.Lock()
-		defer repoMtx.Unlock()
+		mtx := getRepoMutex(repoName)
+		mtx.Lock()
+		defer mtx.Unlock()
 
 		repoDir := filepath.Join(cfg.ReposBaseDir, repoName)
 		repo, err := git.PlainOpen(repoDir)
@@ -113,8 +128,9 @@ func updaterPushChanges(cfg *config.Config) *starlark.Builtin {
 			return nil, fmt.Errorf("repository '%s' not found in configuration", repoName)
 		}
 
-		repoMtx.Lock()
-		defer repoMtx.Unlock()
+		mtx := getRepoMutex(repoName)
+		mtx.Lock()
+		defer mtx.Unlock()
 
 		repoDir := filepath.Join(cfg.ReposBaseDir, repoName)
 		repo, err := git.PlainOpen(repoDir)
@@ -192,8 +208,12 @@ func getPackageFile(cfg *config.Config) *starlark.Builtin {
 			return nil, fmt.Errorf("repository '%s' not found in configuration", repoName)
 		}
 
-		repoMtx.Lock()
-		defer repoMtx.Unlock()
+		// Для этой функции мы не обязательно нуждаемся в мьютексе Git,
+		// так как это только чтение файлов, а не Git операции
+		// Но для консистентности и безопасности будем использовать мьютекс
+		mtx := getRepoMutex(repoName)
+		mtx.Lock()
+		defer mtx.Unlock()
 
 		repoDir := filepath.Join(cfg.ReposBaseDir, repoName)
 		path := filepath.Join(repoDir, pkg, filename)
@@ -220,8 +240,10 @@ func writePackageFile(cfg *config.Config) *starlark.Builtin {
 			return nil, fmt.Errorf("repository '%s' not found in configuration", repoName)
 		}
 
-		repoMtx.Lock()
-		defer repoMtx.Unlock()
+		// Используем мьютекс для согласованности с другими операциями
+		mtx := getRepoMutex(repoName)
+		mtx.Lock()
+		defer mtx.Unlock()
 
 		repoDir := filepath.Join(cfg.ReposBaseDir, repoName)
 		path := filepath.Join(repoDir, pkg, filename)
@@ -345,8 +367,9 @@ func updateChecksums(cfg *config.Config) *starlark.Builtin {
 		updatedContent := updateChecksumsInContent(content, checksumStrings)
 		
 		// Автоматически сбрасываем release='1' при изменении версии
-		repoMtx.Lock()
-		defer repoMtx.Unlock()
+		mtx := getRepoMutex(repoName)
+		mtx.Lock()
+		defer mtx.Unlock()
 		
 		repoDir := filepath.Join(cfg.ReposBaseDir, repoName)
 		path := filepath.Join(repoDir, pkg, filename)
