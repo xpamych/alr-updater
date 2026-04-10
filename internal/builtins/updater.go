@@ -143,6 +143,12 @@ func updaterPushChanges(cfg *config.Config) *starlark.Builtin {
 			return nil, err
 		}
 
+		// Сначала pull — всегда, даже если локально нет изменений
+		err = w.Pull(&git.PullOptions{Progress: os.Stderr})
+		if err != git.NoErrAlreadyUpToDate && err != nil {
+			return nil, err
+		}
+
 		status, err := w.Status()
 		if err != nil {
 			return nil, err
@@ -150,11 +156,6 @@ func updaterPushChanges(cfg *config.Config) *starlark.Builtin {
 
 		if status.IsClean() {
 			return starlark.None, nil
-		}
-
-		err = w.Pull(&git.PullOptions{Progress: os.Stderr})
-		if err != git.NoErrAlreadyUpToDate && err != nil {
-			return nil, err
 		}
 
 		_, err = w.Add(".")
