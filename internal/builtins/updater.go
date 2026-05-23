@@ -32,6 +32,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"go.elara.ws/logger/log"
+	"go.elara.ws/vercmp"
 	"gitea.plemya-x.ru/Plemya-x/ALR-updater/internal/config"
 	"gitea.plemya-x.ru/Plemya-x/ALR-updater/internal/permissions"
 	"go.starlark.net/starlark"
@@ -279,13 +280,13 @@ func writePackageFile(cfg *config.Config) *starlark.Builtin {
 	})
 }
 
-// autoResetRelease автоматически сбрасывает release='1' при изменении версии
+// autoResetRelease автоматически сбрасывает release='1' при увеличении версии
 func autoResetRelease(oldContent, newContent string) string {
 	// Извлекаем версии из старого и нового содержимого
 	versionRegex := regexp.MustCompile(`version='([^']+)'`)
 	
 	oldVersionMatch := versionRegex.FindStringSubmatch(oldContent)
-	newVersionMatch := versionRegex.FindStringSubmatch(newContent)
+	newVersionMatch := regexp.MustCompile(`version='([^']+)'`).FindStringSubmatch(newContent)
 	
 	// Если версии нет в одном из файлов, возвращаем новое содержимое как есть
 	if len(oldVersionMatch) < 2 || len(newVersionMatch) < 2 {
@@ -295,8 +296,8 @@ func autoResetRelease(oldContent, newContent string) string {
 	oldVersion := oldVersionMatch[1]
 	newVersion := newVersionMatch[1]
 	
-	// Если версия изменилась, сбрасываем release на '1'
-	if oldVersion != newVersion {
+	// Сбрасываем release только если версия увеличилась
+	if vercmp.Compare(newVersion, oldVersion) > 0 {
 		releaseRegex := regexp.MustCompile(`release='[^']+'`)
 		if releaseRegex.MatchString(newContent) {
 			return releaseRegex.ReplaceAllString(newContent, "release='1'")
